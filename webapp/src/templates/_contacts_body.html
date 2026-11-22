@@ -8,7 +8,7 @@
 <div class="card contact-list" id="contacts-list">
     {% for group in contact_groups %}
     {% if group.name or contact_groups|length > 1 %}
-    {% call section_row(group.contacts|length ~ ' contact' ~ ('s' if group.contacts|length != 1 else ''), muted=not group.name) %}{% if not group.name %}{{ 'No organization' if group_mode == 'org' else 'Unlabeled' }}{% elif group_mode == 'shelf' %}{{ label_pill(group.name) }}{% else %}{{ group.name }}{% endif %}{% endcall %}
+    {% call section_row(group.contacts|length ~ ' contact' ~ ('s' if group.contacts|length != 1 else ''), muted=not group.name) %}{% if not group.name %}{{ 'No organization' if group_mode == 'org' else 'No space' if group_mode == 'space' else 'No tag' }}{% elif group_mode in ('space', 'tag') %}{{ label_pill(group.name) }}{% else %}{{ group.name }}{% endif %}{% endcall %}
     {% endif %}
     {% for c in group.contacts %}
     <div class="contact-row-wrap" data-uid="{{ c.uid }}" data-undo-row>

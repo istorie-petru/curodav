@@ -136,11 +136,11 @@ class TestPageHeaderNarrowRollout:
 
     def test_settings_holidays(self, conn):
         resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="holidays", conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Modules", "calendar")
+        _assert_narrow_header(resp.body.decode(), "Apps", "calendar")
 
     def test_settings_time_blocks(self, conn):
         resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), view="time-blocks", conn=conn)
-        _assert_narrow_header(resp.body.decode(), "Modules", "calendar")
+        _assert_narrow_header(resp.body.decode(), "Apps", "calendar")
 
     def test_settings_data_maintenance(self, conn, tmp_path):
         req = _request_with_app("/settings/data-maintenance", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
@@ -161,13 +161,6 @@ class TestPageHeaderNarrowRollout:
         assert 'class="page-header-narrow' in body
         assert "page-banner-avatar" not in body
 
-    def test_label_page_now_uses_the_narrow_header(self, conn):
-        db.upsert_label_config(conn, {"name": "CS101", "color": "red", "icon": "book", "created_at": _now()})
-        body = label_pages.label_page("CS101", _bare_request("/labels/CS101"), conn=conn).body.decode()
-        header = body[body.index('class="page-header-narrow'):][:800]
-        assert "page-header-narrow-icon" not in header
-        assert ">CS101</h2>" in header
-        assert "label-icon-tile" not in body
 
 
 class TestNarrowHeaderActionsSlot:

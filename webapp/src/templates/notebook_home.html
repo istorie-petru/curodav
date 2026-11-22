@@ -18,16 +18,6 @@
 </a>
 {% endmacro %}
 <div class="notebook-home">
-    {% if label_report %}
-    <div class="card notebook-report-notice">
-        <div class="card-body">{{ label_report | length }} note{{ 's' if label_report | length != 1 }} had several shelves or projects. The first of each was kept.</div>
-        <div class="card-footer">
-            <span class="spacer"></span>
-            <a class="btn ghost btn-sm" href="/notebook/label-report" data-modal>Review</a>
-            <form method="post" action="/notebook/label-report/dismiss" class="form-inline"><button type="submit" class="btn ghost btn-sm">Dismiss</button></form>
-        </div>
-    </div>
-    {% endif %}
     {% if recent_notes %}
     {% call section_row('') %}Recent{% endcall %}
     <div class="card contact-list notebook-folder-list">
@@ -42,19 +32,13 @@
     </div>
     </div>
     {% endif %}
-    {% if folders.projects %}
-    {% call section_row(folders.projects | length ~ ' project' ~ ('s' if folders.projects | length != 1 else '')) %}Projects{% endcall %}
+    {% if folders.spaces %}
+    {% call section_row(folders.spaces | length ~ ' folder' ~ ('s' if folders.spaces | length != 1 else '')) %}Spaces{% endcall %}
     <div class="folder-grid">
-        {% for f in folders.projects %}{{ tile('/notebook/folder?kind=project&name=' ~ (f.name | urlencode), f.name, f.count ~ ' note' ~ ('s' if f.count != 1 else ''), f.icon, f.color) }}{% endfor %}
+        {% for f in folders.spaces %}{% if f.kind == 'unfiled' %}{{ tile('/notebook/folder?kind=unfiled', 'Unfiled', f.count ~ ' note' ~ ('s' if f.count != 1 else ''), 'inbox', 'gray') }}{% else %}{{ tile('/notebook/folder?kind=space&name=' ~ (f.name | urlencode), f.name, f.count ~ ' note' ~ ('s' if f.count != 1 else ''), f.icon, f.color) }}{% endif %}{% endfor %}
     </div>
     {% endif %}
-    {% if folders.labels %}
-    {% call section_row(folders.labels | length ~ ' folder' ~ ('s' if folders.labels | length != 1 else '')) %}Labels{% endcall %}
-    <div class="folder-grid">
-        {% for f in folders.labels %}{% if f.kind == 'unfiled' %}{{ tile('/notebook/folder?kind=unfiled', 'Unfiled', f.count ~ ' note' ~ ('s' if f.count != 1 else ''), 'inbox', 'gray') }}{% else %}{{ tile('/notebook/folder?kind=label&name=' ~ (f.name | urlencode), f.name, f.count ~ ' note' ~ ('s' if f.count != 1 else ''), f.icon, f.color) }}{% endif %}{% endfor %}
-    </div>
-    {% endif %}
-    {% if not folders.projects and not folders.labels %}
+    {% if not folders.spaces %}
     {{ empty_state('No documents yet', icon_name='notebook') }}
     {% endif %}
     {% call section_row('') %}Library{% endcall %}

@@ -167,6 +167,20 @@ def object_label_rows(conn) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def space_rows(conn) -> list[dict[str, Any]]:
+    return [dict(r) for r in conn.execute("SELECT * FROM label_groups")]
+
+
+def object_space_rows(conn) -> list[dict[str, Any]]:
+    return [dict(r) for r in conn.execute("SELECT object_type, object_id, space FROM object_spaces")]
+
+
+def restore_object_spaces(conn, rows: list[dict[str, Any]]) -> None:
+    for row in rows:
+        conn.execute("INSERT OR IGNORE INTO object_spaces (object_type, object_id, space) VALUES (?, ?, ?)", (row["object_type"], row["object_id"], row["space"]))
+    conn.commit()
+
+
 def notebook_image_rows(conn) -> list[dict]:
     """Every stored figure picture, base64 so the JSON backup carries them."""
     import base64

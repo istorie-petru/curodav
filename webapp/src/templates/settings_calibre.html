@@ -1,27 +1,23 @@
 {% extends "base.html" %}
-{% from "_inputs.html" import switch_input %}
 {% from "_empty_state.html" import empty_state %}
+{% from "_section_row.html" import section_row %}
+{% from "_action_menu.html" import action_menu %}
+{% from "_settings_rows.html" import switch_row %}
 {% block title %}Calibre - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% call page_header_narrow("Calibre", "book-open") %}{% endcall %}
+{{ page_header_narrow("Calibre", "book-open") }}
 {% include "_flash.html" %}
-<div id="modal-target">
-<div class="settings-group">
+<div class="settings-stack">
 {% if not ready %}
 <div class="card">{% call empty_state('No book library found', 'book-open', 'Choose the library folder in the Library settings first.') %}
     <a href="/settings/library" class="btn primary">Library settings</a>{% endcall %}</div>
 {% else %}
+{% call section_row('') %}Sync{% endcall %}
 <div class="card">
-    <form class="settings-field-row" method="post" action="/settings/calibre/auto" id="calibre-auto-form">
-        <label class="settings-field-label" for="calibre-auto">Keep in sync automatically
-            <span class="settings-field-hint">Changes made in Calibre are read into Curodav as they happen. When off, only the audit below changes anything.</span>
-        </label>
-        <span class="spacer"></span>
-        {{ switch_input({'name': 'auto', 'value': '1', 'id': 'calibre-auto', 'checked': auto, 'data-change-submit': true}) }}
-    </form>
+    {{ switch_row('/settings/calibre/auto', 'calibre-auto-form', 'auto', 'Keep in sync automatically', 'Changes made in Calibre are read into Curodav as they happen. When off, only the audit below changes anything.', auto) }}
     <div class="settings-field-row">
-        <span class="settings-field-label">{{ path }}
+        <span class="settings-field-label settings-ellipsis" title="{{ path }}">{{ path }}
             <span class="settings-field-hint">{{ books }} books in Calibre, {{ linked }} linked to Curodav</span>
         </span>
         <span class="spacer"></span>
@@ -30,24 +26,25 @@
             <input type="hidden" name="all" value="1"><button type="submit" class="btn primary">{{ icon('check', 'icon-sm') }} Fix all {{ fixable }}</button></form>{% endif %}
     </div>
 </div>
-<div class="card table-scroll table-responsive">
-    <div class="uni-card-head"><h2>Audit</h2></div>
+{% call section_row('') %}Audit{% endcall %}
+<div class="card">
     {% if issues %}
     <p class="calibre-counts">{% for k, n in counts.items() %}<a href="/settings/calibre?kind={{ k }}" class="calibre-count{% if chosen == k %} is-active{% endif %}">{{ kinds[k] }} {{ n }}</a>{% endfor %}{% if chosen %}<a href="/settings/calibre" class="calibre-count">All</a>{% endif %}</p>
-    <table class="entity-table calibre-table">
-        <thead><tr><th class="col-name">Book</th><th class="col-opt-1">Finding</th><th class="col-opt-2 col-text">Calibre</th><th class="col-opt-2 col-text">Curodav</th><th class="col-actions">Fix</th></tr></thead>
+    <table class="entity-table settings-table">
+        <thead><tr><th class="col-name">Book</th><th class="col-meta col-opt-1">Finding</th><th class="col-meta col-opt-2">Calibre</th><th class="col-meta col-opt-2">Curodav</th><th class="col-actions-narrow"></th></tr></thead>
         <tbody>
         {% for i in issues if not chosen or i.kind == chosen %}
         <tr>
-            <td class="col-name">{{ i.title }}{% if i.by %}<span class="library-sub">{{ i.by }}</span>{% endif %}</td>
-            <td class="col-opt-1">{{ i.label }}<span class="library-sub">{{ i.detail }}</span></td>
-            <td class="col-opt-2 col-text"><span class="cell-wrap calibre-diff">{{ i.calibre }}</span></td>
-            <td class="col-opt-2 col-text"><span class="cell-wrap calibre-diff">{{ i.curodav }}</span></td>
-            <td class="col-actions">{% if i.fix %}
-                <form class="form-contents" method="post" action="/settings/calibre/apply"><input type="hidden" name="issue" value="{{ i.id }}">
-                    {% if i.kind == 'diff' %}<button type="submit" name="side" value="calibre" class="btn ghost">Use Calibre</button> <button type="submit" name="side" value="curodav" class="btn ghost">Use Curodav</button>
-                    {% else %}<button type="submit" class="btn ghost">{{ i.fix }}</button>{% endif %}
-                </form>{% endif %}</td>
+            <td class="col-name"><span class="label-name" title="{{ i.title }}{% if i.by %} · {{ i.by }}{% endif %}">{{ i.title }}{% if i.by %} <span class="text-muted">{{ i.by }}</span>{% endif %}</span></td>
+            <td class="col-meta col-opt-1" title="{{ i.label }}: {{ i.detail }}">{{ i.label }}</td>
+            <td class="col-meta col-opt-2" title="{{ i.calibre }}">{{ i.calibre or '—' }}</td>
+            <td class="col-meta col-opt-2" title="{{ i.curodav }}">{{ i.curodav or '—' }}</td>
+            <td class="col-actions-narrow">
+                {% if i.fix %}
+                {% set _items = [{'label': 'Use Calibre', 'icon': 'book-open', 'form_action': '/settings/calibre/apply', 'fields': {'issue': i.id, 'side': 'calibre'}}, {'label': 'Use Curodav', 'icon': 'check', 'form_action': '/settings/calibre/apply', 'fields': {'issue': i.id, 'side': 'curodav'}}] if i.kind == 'diff' else [{'label': i.fix, 'icon': 'check', 'form_action': '/settings/calibre/apply', 'fields': {'issue': i.id}}] %}
+                {{ action_menu(_items, 'Fix ' ~ i.title) }}
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
         </tbody>
@@ -57,6 +54,5 @@
     {% endif %}
 </div>
 {% endif %}
-</div>
 </div>
 {% endblock %}

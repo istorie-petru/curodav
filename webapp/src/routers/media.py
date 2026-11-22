@@ -265,7 +265,7 @@ def read_in_app(uid: str, request: Request, edition: str = "", conn=Depends(get_
         return templates.TemplateResponse("library_reader_book.html", {
             "request": request, "c": c, "authors": authors,
             "file_url": f"/library/editions/{euid}/converted?format={fmt}" if converted else f"/library/editions/{euid}/file?format={fmt}",
-            "file_name": f"book.{ext}", "kind": kind, "is_pdf": kind == "pdf", "is_comic": kind == "comic", "converted": converted, "edition_uid": euid,
+            "file_name": f"book.{ext}", "book_language": (db.get_edition(conn, euid) or {}).get("language") or "", "kind": kind, "is_pdf": kind == "pdf", "is_comic": kind == "comic", "converted": converted, "edition_uid": euid,
             "file_format": fmt, "manga": c.get("type") == "manga", "ocr_available": book_convert.ocr_available(),
             "crumbs": [{"url": "/library", "name": "Library"}],
             "reader": book_reader.settings(conn), "lookups": [x for x in book_reader.lookups(conn) if x["on"]], "colors": book_annotations.COLORS,
@@ -425,8 +425,8 @@ def save_ratings(scale: str = Form(media.DEFAULT_SCALE), advanced: str = Form(""
 
 
 @settings_router.get("/find")
-def find_details_modal(request: Request, conn=Depends(get_db)):
-    return _modal_page("media_settings_find_modal.html", request, sources=_sources(conn), auto_covers=db.auto_covers(conn))
+def find_details_redirect():
+    return RedirectResponse(SETTINGS, status_code=303)
 
 
 @settings_router.post("/find")
@@ -441,8 +441,8 @@ def book_folder_modal(request: Request, conn=Depends(get_db)):
 
 
 @settings_router.get("/maintenance")
-def maintenance_modal(request: Request, conn=Depends(get_db)):
-    return _modal_page("media_settings_maintenance_modal.html", request, calibre_ready=media_books.library(conn) is not None,
+def maintenance_page(request: Request, conn=Depends(get_db)):
+    return _modal_page("settings_library_maintenance.html", request, crumbs=[{"url": SETTINGS, "name": "Library"}], calibre_ready=media_books.library(conn) is not None,
                        jobs=[{"key": k, "label": v[0], "hint": v[1], "confirm": v[2]} for k, v in media_calibre_audit.JOBS.items()], job=media_calibre_audit.job_state(conn))
 
 
@@ -453,7 +453,7 @@ def reader_modal(request: Request, conn=Depends(get_db)):
 
 @settings_router.get("/lookups")
 def lookups_modal(request: Request, conn=Depends(get_db)):
-    return _modal_page("media_settings_lookups_modal.html", request, lookups=book_reader.lookups(conn))
+    return _modal_page("media_settings_lookups_modal.html", request, on_keys=[l["key"] for l in book_reader.lookups(conn) if l["on"]])
 
 
 @settings_router.get("")
@@ -562,7 +562,7 @@ def calibre_page(request: Request, conn=Depends(get_db)):
     issues = media_calibre_audit.audit(conn) if lib else []
     counts = {k: sum(1 for i in issues if i["kind"] == k) for k in media_calibre_audit.KINDS}
     return templates.TemplateResponse("settings_calibre.html", {
-        "request": request, "ready": lib is not None, "path": str(media_books.library_path(conn) or ""), "issues": issues,
+        "request": request, "crumbs": [{"url": SETTINGS, "name": "Library"}], "ready": lib is not None, "path": str(media_books.library_path(conn) or ""), "issues": issues,
         "counts": {k: v for k, v in counts.items() if v}, "kinds": media_calibre_audit.KINDS, "auto": media_calibre_audit.auto_on(conn),
         "books": len(lib.books()) if lib else 0, "linked": len(db.calibre_uuids(conn)),
         "fixable": sum(1 for i in issues if i["fix"]), "chosen": request.query_params.get("kind", ""),
@@ -595,6 +595,20 @@ async def save_reader_lookups(request: Request, x_requested_with: str | None = H
     error = book_reader.save_lookups(conn, [str(v) for v in form.getlist("on")], str(form.get("add_name") or ""), str(form.get("add_url") or ""), str(form.get("remove") or ""))
     if error:
         return validation_response({"field": "add_url", "message": error}, x_requested_with, SETTINGS)
+    return respond(x_requested_with, SETTINGS)
+
+
+@settings_router.post("/lookups/toggle")
+def toggle_reader_lookup(key: str = Form(""), on: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    keys = {l["key"] for l in book_reader.lookups(conn) if l["on"]}
+    keys = (keys | {key}) if on else (keys - {key})
+    book_reader.save_lookups(conn, sorted(keys))
+    return respond(x_requested_with, SETTINGS)
+
+
+@settings_router.post("/lookups/remove")
+def remove_reader_lookup(key: str = Form(""), x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
+    book_reader.save_lookups(conn, [l["key"] for l in book_reader.lookups(conn) if l["on"] and l["key"] != key], remove=key)
     return respond(x_requested_with, SETTINGS)
 
 

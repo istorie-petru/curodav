@@ -1,12 +1,13 @@
 // Live log view: polls the entries the app keeps in memory and groups
-// identical ones into thin cards (title, count, copy). A card opens to the
-// full text; the category buttons show exactly that category.
+// identical ones into thin rows (priority, title, count, copy). A row opens to the
+// full text. Info, warnings and errors are shown; debug lines are left out.
 (function () {
   const view = document.getElementById("log-view");
   if (!view) return;
   const lines = document.getElementById("log-lines");
   const empty = document.getElementById("log-empty");
-  let level = "important";
+  const level = "notable";
+  const LEVEL_NAMES = { debug: "Debug", info: "Info", warning: "Warning", error: "Error", critical: "Critical" };
   let after = 0;
   let timer = null;
   const cards = new Map();
@@ -29,6 +30,7 @@
     card.dataset.key = key;
     card.innerHTML =
       '<div class="log-card-head">' +
+      '<span class="log-card-level"></span>' +
       '<button type="button" class="log-card-toggle" aria-expanded="false">' +
       '<span class="log-card-title"></span>' +
       '<span class="log-card-meta"><span class="log-card-component"></span><span class="log-card-time"></span></span>' +
@@ -37,6 +39,7 @@
       '<button type="button" class="icon-btn log-card-copy" title="Copy" aria-label="Copy">' + icon("copy") + "</button>" +
       "</div>" +
       '<pre class="log-card-body" hidden></pre>';
+    card.querySelector(".log-card-level").textContent = LEVEL_NAMES[entry.level] || entry.level;
     card.querySelector(".log-card-title").textContent = entry.message.split("\n")[0];
     card.querySelector(".log-card-component").textContent = entry.component;
     card.dataset.level = entry.level;
@@ -87,16 +90,6 @@
   }
 
   view.addEventListener("click", (e) => {
-    const button = e.target.closest("[data-log-level]");
-    if (button) {
-      level = button.dataset.logLevel;
-      view.querySelectorAll("[data-log-level]").forEach((b) => b.classList.toggle("active", b === button));
-      lines.replaceChildren();
-      cards.clear();
-      after = 0;
-      poll();
-      return;
-    }
     const copy = e.target.closest(".log-card-copy");
     if (copy) {
       const text = fullText(copy.closest(".log-card"));

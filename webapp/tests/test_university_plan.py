@@ -35,36 +35,10 @@ LECTURE = {"weekday": 0, "start": "10:00", "end": "12:00", "room": "A2", "kind":
 
 # ---- semester ----
 
-def test_a_semester_creates_a_managed_shelf_with_the_semester_page_and_no_space(conn, sem):
-    cfg = db.get_label_config(conn, "University")
-    assert cfg["managed_by"] == "academic" and not cfg["label_group"] and cfg["page_type"] == "academic" and cfg["sidebar_pin"]
-    assert up.semester_for_shelf(conn, "university")["uid"] == sem["uid"] and db.get_group(conn, "University") is None
-    with pytest.raises(tags.ManagedLabelError):
-        db.upsert_label_config(conn, {"name": "University", "color": "red"})
 
 
-def test_the_semester_shelf_can_sit_in_any_existing_space_and_move_and_the_space_stays_ordinary(conn):
-    db.ensure_group(conn, "Studies")
-    db.ensure_group(conn, "Hobbies")
-    uid = up.save_semester(conn, uid=None, name="Spring", shelf_name="Spring shelf", start_date="", end_date="", class_end_date="", space="Studies")
-    assert db.get_label_config(conn, "Spring shelf")["label_group"] == "Studies" and db.get_group(conn, "Studies")["page_type"] == "dashboard"
-    up.save_semester(conn, uid=uid, name="Spring", shelf_name="", start_date="", end_date="", class_end_date="")
-    assert db.get_label_config(conn, "Spring shelf")["label_group"] == "Studies"
-    up.save_semester(conn, uid=uid, name="Spring", shelf_name="", start_date="", end_date="", class_end_date="", space="Hobbies")
-    assert db.get_label_config(conn, "Spring shelf")["label_group"] == "Hobbies" and db.get_group(conn, "Hobbies")["page_type"] == "dashboard"
-    up.save_semester(conn, uid=uid, name="Spring", shelf_name="", start_date="", end_date="", class_end_date="", space="")
-    assert not db.get_label_config(conn, "Spring shelf")["label_group"]
-    with pytest.raises(up.PlanError):
-        up.save_semester(conn, uid=uid, name="Spring", shelf_name="", start_date="", end_date="", class_end_date="", space="Nowhere")
-    assert db.get_group(conn, "Nowhere") is None
 
 
-def test_an_existing_shelf_is_adopted_by_name(conn):
-    db.upsert_label_config(conn, {"name": "University", "color": "red"})
-    tags.add_default_tag(conn, "University")
-    assert up.plan_semester(conn, "University") == {"shelf": "University", "adopts": True, "tags": ["University"]}
-    uid = up.save_semester(conn, uid=None, name="Autumn", shelf_name="University", start_date="2026-10-05", end_date="", class_end_date="")
-    assert db.get_label_config(conn, "University")["color"] == "red" and up.get_semester(conn, uid)["shelf_name"] == "University"
 
 
 def test_semester_dates_are_checked(conn):
@@ -447,27 +421,8 @@ def test_class_content_is_a_topic_free_text_or_nothing(conn, sem):
         up.save_class_content(conn, "e1", "", "x")
 
 
-def test_a_semester_takes_over_the_shelf_picked_for_it(conn):
-    db.upsert_label_config(conn, {"name": "Old uni"})
-    db.upsert_label_config(conn, {"name": "Home"})
-    tags.add_default_tag(conn, "Old uni")
-    tags.record(conn, "task", "t1", ["Old uni"])
-    assert "Old uni" in up.adoptable_shelves(conn)
-    uid = up.save_semester(conn, uid=None, name="Autumn 2026", shelf_name="Old uni", start_date="", end_date="", class_end_date="")
-    assert up.get_semester(conn, uid)["shelf_name"] == "Old uni"
-    assert tags.managed_by(conn, "Old uni") == up.MODULE_KEY
-    assert "Old uni" not in up.adoptable_shelves(conn)
 
 
-def test_a_semester_can_be_moved_to_another_shelf(conn):
-    db.upsert_label_config(conn, {"name": "Old uni"})
-    tags.add_default_tag(conn, "Old uni")
-    uid = up.save_semester(conn, uid=None, name="First Semester", shelf_name="", start_date="", end_date="", class_end_date="")
-    assert up.get_semester(conn, uid)["shelf_name"] == "First Semester"
-    assert up.adoptable_shelves(conn, "First Semester")[0:1] == ["First Semester"]
-    up.save_semester(conn, uid=uid, name="First Semester", shelf_name="Old uni", start_date="", end_date="", class_end_date="")
-    assert up.get_semester(conn, uid)["shelf_name"] == "Old uni"
-    assert tags.managed_by(conn, "Old uni") == up.MODULE_KEY and not tags.managed_by(conn, "First Semester")
 
 
 def test_a_class_on_a_date_of_its_own_stays_out_of_the_weekly_timetable_and_a_moved_class_is_made_up(conn, sem):
@@ -521,3 +476,35 @@ def test_a_description_written_on_an_exam_item_survives_the_course_sheet(conn, s
     ms = ue.list_milestones(conn, sem["uid"])[0]
     ue.save_item(conn, sem["uid"], "Biology", ms["way_id"], {"uid": ms["uid"], "title": ms["raw_title"], "day": ms["day"], "start": ms["start"], "end": ms["end"], "due": ms["due"]})
     assert db.get_task(conn, task_uid)["description"] == "Bring the lab notebook"
+
+
+def test_a_semester_is_a_code_met_on_tags_and_has_no_shelf(conn, sem):
+    assert db.get_label_config(conn, "University") is None
+    assert up.semester_for_shelf(conn, "university")["uid"] == sem["uid"]
+    _bio(conn, sem)
+    assert [t["name"] for t in tags.tags_of_code(conn, "University")] == ["Biology"]
+    assert tags.get_tag(conn, "Biology")["code"] == "University"
+
+
+def test_the_semester_moves_with_its_tags_to_another_space(conn, sem):
+    db.ensure_group(conn, "Studies")
+    db.ensure_group(conn, "Hobbies")
+    _bio(conn, sem)
+    up.place_shelf(conn, sem, "Studies")
+    assert tags.get_tag(conn, "Biology")["space"] == "Studies" and up.semester_group(conn, sem) == "Studies"
+    up.place_shelf(conn, sem, "Hobbies")
+    assert tags.get_tag(conn, "Biology")["space"] == "Hobbies"
+    with pytest.raises(up.PlanError):
+        up.place_shelf(conn, sem, "Nowhere")
+
+
+def test_a_code_already_on_tags_is_adopted(conn):
+    tags.add_tag(conn, "Chemistry", "Personal")
+    conn.execute("UPDATE label_config SET code = 'Spring' WHERE name = 'Chemistry'")
+    assert up.plan_semester(conn, "Spring") == {"shelf": "Spring", "adopts": True, "tags": ["Chemistry"]}
+
+
+def test_a_semester_can_take_another_code_and_its_tags_follow(conn, sem):
+    _bio(conn, sem)
+    up.save_semester(conn, uid=sem["uid"], name="Autumn 2026", shelf_name="Winter", start_date="", end_date="", class_end_date="")
+    assert up.get_semester(conn, sem["uid"])["shelf_name"] == "Winter" and tags.get_tag(conn, "Biology")["code"] == "Winter"

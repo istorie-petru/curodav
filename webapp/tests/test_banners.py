@@ -150,19 +150,7 @@ class TestBannerPartialRendering:
     version through /banners/image and only hotlink legacy no-version
     remote banners."""
 
-    def test_cached_remote_renders_served_url(self, conn):
-        _make_label(conn, "CS101")
-        _set_remote(conn, cached=True, scope="CS101")
-        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
-        assert "/banners/image?scope=CS101" in body
-        assert "cdn.example.com" not in body
 
-    def test_legacy_hotlink_remote_keeps_image_url(self, conn):
-        _make_label(conn, "CS101")
-        _set_remote(conn, cached=False, scope="CS101")
-        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
-        assert "https://cdn.example.com/pic.jpg" in body
-        assert "/banners/image?scope=CS101" not in body
 
     def test_editor_preview_uses_served_url_for_cached_remote(self, conn):
         _set_remote(conn, cached=True)
@@ -278,27 +266,8 @@ class TestPageBannerDefaultFallback:
         link = body[link_start:link_end]
         assert "Change banner" in link
 
-    def test_project_page_falls_back_to_the_default_banner(self, conn):
-        _make_label(conn, "CS101")
-        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
-        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
-        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
-        assert resp.context["has_own_banner"] is False
 
-    def test_project_page_own_banner_overrides_the_default(self, conn):
-        _make_label(conn, "CS101")
-        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
-        _set_remote(conn, cached=True, scope="CS101", image_url="https://cdn.example.com/cs101-own.jpg")
-        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
-        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/cs101-own.jpg"
-        assert resp.context["has_own_banner"] is True
 
-    def test_space_page_falls_back_to_the_default_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Work", "generate_space": 1, "created_at": _now()})
-        _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
-        resp = label_pages.label_page("Work", _request("/labels/Work"), conn=conn)
-        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/default.jpg"
-        assert resp.context["has_own_banner"] is False
 
     def test_removing_a_page_own_banner_reverts_to_the_default(self, conn):
         _set_remote(conn, cached=True, scope=deps.PAGE_HEADER_BANNER_SCOPE, image_url="https://cdn.example.com/default.jpg")
@@ -632,34 +601,6 @@ class TestBannerMonthAndDefaultFallback:
         assert banner["image_url"] == "https://cdn.example.com/july-upload.jpg"
 
 
-class TestLabelSettingsBannerEntryPoint:
-    """label_form_modal.html's Banner field (2026-08-30 direct request) --
-    a label's banner used to be reachable only via a dashboard page's own
-    edit-mode button; this is the same /banners/editor dialog, scoped to
-    the label, opened from Settings > Labels instead."""
-
-    def test_edit_modal_offers_add_banner_when_unset(self, conn):
-        _make_label(conn, "Client call")
-        resp = labels_router.edit_label_modal("Client call", _request("/settings/labels/Client call/edit"), conn=conn)
-        assert resp.context["banner"] is None
-        body = resp.body.decode()
-        assert "/banners/editor?scope=Client" in body
-        assert "Add banner" in body
-        assert "Change banner" not in body
-
-    def test_edit_modal_shows_preview_and_change_link_when_set(self, conn):
-        _make_label(conn, "Client call")
-        _set_remote(conn, cached=True, scope="Client call", image_url="https://cdn.example.com/pic.jpg")
-        resp = labels_router.edit_label_modal("Client call", _request("/settings/labels/Client call/edit"), conn=conn)
-        assert resp.context["banner"]["image_url"] == "https://cdn.example.com/pic.jpg"
-        body = resp.body.decode()
-        assert "Change banner" in body
-        assert "Add banner" not in body
-
-    def test_new_label_modal_has_no_banner_field_yet(self, conn):
-        resp = labels_router.new_label_modal(_request("/settings/labels/new"), conn=conn)
-        body = resp.body.decode()
-        assert "/banners/editor" not in body
 
 
 class TestBannerRendersOnTaskDetailAndKanban:
@@ -728,23 +669,7 @@ class TestBannerRendersOnTaskDetailAndKanban:
         # just "some cal-accent value is present."
         assert f"--cover-accent:var(--cal-accent-{deps._stable_color('c1')})" in body
 
-    def test_kanban_card_carries_the_resolved_project_banner(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "page_type": "sections", "created_at": _now()})
-        _set_remote(conn, scope="Garden", image_url="https://cdn.example.com/project.jpg")
-        db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
-        resp = label_pages.label_page("Garden", _request("/labels/Garden", b"view=board"), conn=conn)
-        card = [t for t in resp.context["columns"]["active"] if t["uid"] == "t1"][0]
-        assert card["strip"]["banner"]["image_url"] == "https://cdn.example.com/project.jpg"
-        body = resp.body.decode()
-        assert 'class="kanban-card-strip"' in body
-        assert 'src="https://cdn.example.com/project.jpg"' in body
 
-    def test_kanban_card_has_no_banner_markup_when_none_resolves(self, conn):
-        db.upsert_label_config(conn, {"name": "Garden", "is_project": 1, "page_type": "sections", "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "Water the plants", "description": "", "status": "active", "tags": ["Garden"], "created_at": _now()})
-        resp = label_pages.label_page("Garden", _request("/labels/Garden", b"view=board"), conn=conn)
-        body = resp.body.decode()
-        assert "<img src=" not in body.split('class="kanban-card-strip')[1].split("</div>")[0]
 
 
 class TestNarrowDashboardHeaders:
@@ -754,18 +679,7 @@ class TestNarrowDashboardHeaders:
     (Peter: "keep per-page images"), falling back to the Settings default.
     No avatar anywhere."""
 
-    def test_label_page_uses_its_own_banner_in_the_strip(self, conn):
-        _make_label(conn, "CS101")
-        _set_remote(conn, cached=True, scope="CS101")
-        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
-        assert 'class="page-header-narrow has-banner"' in body
-        assert 'class="page-header-narrow-bg" src="/banners/image?scope=CS101&amp;v=' in body
 
-    def test_label_page_falls_back_to_the_default_banner(self, conn):
-        _make_label(conn, "CS101")
-        _set_remote(conn, cached=True, scope=db.PAGE_HEADER_BANNER_SCOPE)
-        body = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn).body.decode()
-        assert "/banners/image?scope=__page_header__&amp;v=" in body
 
     def test_group_page_uses_the_group_key(self, conn):
         db.upsert_label_config(conn, {"name": "Maths", "label_group": "Uni"})

@@ -32,6 +32,7 @@
     {% if m.tag_items %}{% call vi_row('tag', 'Tags') %}{% for t in m.tag_items %}{{ tag_pill(t, '/library?tag=' ~ (t.name | urlencode)) }} {% endfor %}{% endcall %}{% endif %}
     {% for r in ratings %}{% call vi_row('award', r.name) %}{{ r.value }}{% endcall %}{% endfor %}
     {% if c.subtitle %}{% call vi_row('text', 'Subtitle') %}{{ c.subtitle }}{% endcall %}{% endif %}
+    {% if c.space %}{% call vi_row('layers', 'Space') %}{{ c.space }}{% endcall %}{% endif %}
     {% if c.keywords %}{% call vi_row('hash', 'Keywords') %}{{ c.keywords | join(', ') }}{% endcall %}{% endif %}
     {% if c.summary %}{% call vi_row('align-left', 'Summary') %}<span class="media-summary">{{ c.summary }}</span>{% endcall %}{% endif %}
     {% for label, value in rows if not (has_book and label in ('Publisher', 'ISBN')) %}{% call vi_row('info', label) %}{% if label == 'URL' %}<a href="{{ value }}" target="_blank" rel="noopener noreferrer">{{ value }}</a>{% else %}{{ value }}{% endif %}{% endcall %}{% endfor %}

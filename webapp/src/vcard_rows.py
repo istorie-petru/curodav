@@ -98,6 +98,8 @@ def contact_row_to_vcard(row: dict[str, Any], name_field: str = "full_name") -> 
             prop.type_param = vcard_type
     if row.get("tags"):
         card.add("categories").value = list(row["tags"])
+    if row.get("space"):
+        card.add("x-curodav-space").value = row["space"]
     if row.get("notes"):
         card.add("note").value = row["notes"]
     if row.get("photo_b64"):
@@ -195,6 +197,8 @@ def vcard_to_contact_row(card: vobject.base.Component) -> dict[str, Any]:
     if hasattr(card, "categories"):
         cats = card.categories.value
         row["tags"] = list(cats) if isinstance(cats, list) else [str(cats)]
+    if hasattr(card, "x_curodav_space"):
+        row["space"] = str(card.x_curodav_space.value)
     if hasattr(card, "note"):
         row["notes"] = str(card.note.value)
     if hasattr(card, "photo"):

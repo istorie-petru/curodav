@@ -410,9 +410,19 @@ try {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ field: host.dataset.viField, value }),
     });
-    if (!resp.ok) {
-      const body = await resp.json().catch(() => ({}));
-      throw new Error(body.error || "Could not save that change");
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(body.error || "Could not save that change");
+    // A save that can be taken back says how: the toast offers Undo, which posts the field to the given address.
+    if (body.undo && window.ccToast) {
+      const undo = body.undo;
+      window.ccToast({
+        message: undo.message, duration: 12000, actionLabel: "Undo",
+        onAction: async () => {
+          const back = await fetch(undo.url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: undo.field }) });
+          if (back.ok) { window.ccToast({ message: undo.field + " put back" }); document.dispatchEvent(new CustomEvent("cc-view-refresh")); }
+          else fail("Could not put it back");
+        },
+      });
     }
   }
 
@@ -491,7 +501,7 @@ try {
 
   document.addEventListener("click", (e) => {
     const host = e.target.closest && e.target.closest(".vi-editable");
-    if (!host || e.target.closest(".vi-edit, a[href]")) return;
+    if (!host || e.target.closest(".vi-edit, a[href], button")) return;
     openEditor(host);
   });
 
@@ -558,6 +568,13 @@ try {
     if (!host || !host.classList.contains("is-editing")) return;
     const field = host.dataset.viField;
     const value = area.value.trim();
+    // A secret value is typed fresh and never shown: an empty editor changes nothing, and the row keeps its mask.
+    if (host.dataset.viSecret !== undefined) {
+      if (value) { try { await save(host, value); } catch (err) { fail(err.message); } }
+      area.value = "";
+      close(host);
+      return;
+    }
     try { await save(host, value); paint(host, field, value, ""); syncTemplate(host, field, value, value); } catch (err) { fail(err.message); }
     close(host);
   });
@@ -2782,6 +2799,8 @@ try {
   function showSource(scope, source) {
     scope.querySelector("[data-edition-link]").hidden = source !== "link";
     scope.querySelector("[data-edition-file]").hidden = source !== "local";
+    var language = scope.querySelector("[data-edition-language]");
+    if (language) language.hidden = source !== "local";
   }
 
   function pickSource(scope, source) {
@@ -2796,6 +2815,8 @@ try {
     var editions = JSON.parse(scope.dataset.editions || "[]");
     var e = editions.find(function (x) { return x.uid === uid; }) || {};
     ["edition", "year", "publisher", "place", "isbn", "doi", "url"].forEach(function (k) { setField(scope, "ed_" + k, e[k]); });
+    var language = scope.querySelector('input[name="ed_language"][value="' + (e.language || "") + '"]');
+    if (language) { language.checked = true; language.dispatchEvent(new Event("change", { bubbles: true })); }
     var file = scope.querySelector('input[type="file"]');
     if (file) file.value = "";
     var value = scope.querySelector("[data-upload-value]");

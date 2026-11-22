@@ -1,6 +1,6 @@
 """Personal finance storage (features/finance.md): accounts, transactions and scheduled transactions.
 
-Amounts are integer minor units. Transactions carry tags like every other item, stored in `object_tags`; the tags that
+Amounts are integer minor units. Transactions carry tags like every other item, stored in `object_labels`; the tags that
 started as finance tags sit under the shelf Finance (older label rows are left dormant in the database). Balances are always derived, never stored.
 """
 
@@ -167,8 +167,8 @@ def delete_account(conn: sqlite3.Connection, uid: str) -> None:
 
 def _delete_transaction_rows(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM finance_transactions WHERE uid = ?", (uid,))
-    conn.execute("DELETE FROM object_tags WHERE object_type = 'transaction' AND object_id = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'transaction' AND object_id = ?", (uid,))
+    conn.execute("DELETE FROM object_spaces WHERE object_type = 'transaction' AND object_id = ?", (uid,))
     conn.execute("DELETE FROM object_contacts WHERE object_type = 'transaction' AND object_id = ?", (uid,))
 
 
@@ -190,9 +190,9 @@ def _attach(conn: sqlite3.Connection, rows: list[dict]) -> list[dict]:
     uids = [r["uid"] for r in rows]
     marks = ", ".join("?" for _ in uids)
     linked: dict[str, list[str]] = {}
-    for r in conn.execute(f"SELECT object_id, tag_name FROM object_tags WHERE object_type = 'transaction' AND object_id IN ({marks}) "
-                          "ORDER BY tag_name COLLATE NOCASE", uids):
-        linked.setdefault(r["object_id"], []).append(r["tag_name"])
+    for r in conn.execute(f"SELECT object_id, label_name FROM object_labels WHERE object_type = 'transaction' AND object_id IN ({marks}) "
+                          "ORDER BY label_name COLLATE NOCASE", uids):
+        linked.setdefault(r["object_id"], []).append(r["label_name"])
     for row in rows:
         row["tags"] = linked.get(row["uid"], [])
     return rows
@@ -218,8 +218,8 @@ def list_transactions(conn: sqlite3.Connection, filters: dict | None = None, lim
     where: list[str] = []
     params: list[Any] = []
     if f.get("q"):
-        where.append("(t.description LIKE ? OR a.name LIKE ? OR a.abbreviation LIKE ? OR EXISTS (SELECT 1 FROM object_tags g "
-                     "WHERE g.object_type = 'transaction' AND g.object_id = t.uid AND g.tag_name LIKE ?))")
+        where.append("(t.description LIKE ? OR a.name LIKE ? OR a.abbreviation LIKE ? OR EXISTS (SELECT 1 FROM object_labels g "
+                     "WHERE g.object_type = 'transaction' AND g.object_id = t.uid AND g.label_name LIKE ?))")
         params += [f"%{f['q']}%"] * 4
     if f.get("account_uid"):
         where.append("(t.account_uid = ? OR t.to_account_uid = ?)")
@@ -331,15 +331,14 @@ def backup_rows(conn: sqlite3.Connection) -> dict[str, list[dict]]:
         "finance_accounts": [dict(r) for r in conn.execute("SELECT * FROM finance_accounts")],
         "finance_transactions": list_transactions(conn),
         "finance_tags": [dict(r) for r in conn.execute(
-            "SELECT name, color, icon FROM label_tags WHERE name IN (SELECT tag_name FROM object_tags WHERE object_type IN ('transaction', 'scheduled'))")]
-        if tags._has(conn, "label_tags") else [],
+            "SELECT name, color, icon FROM label_config WHERE name IN (SELECT label_name FROM object_labels WHERE object_type IN ('transaction', 'scheduled'))")],
     }
 
 
 def restore_rows(conn: sqlite3.Connection, payload: dict) -> int:
     count = 0
     for row in payload.get("finance_tags", []):  # backups from before tags lived under shelves
-        tags.add_finance_tag(conn, row["name"], row.get("color") or "gray", row.get("icon") or "")
+        tags.add_tag(conn, row["name"], "Personal", row.get("color") or "gray", row.get("icon") or "")
     for row in payload.get("finance_accounts", []):
         clean = {k: row[k] for k in ("name", "type", "currency", "opening_balance", "opening_date")} | {"abbreviation": row.get("abbreviation") or ""}
         save_account(conn, clean, row["uid"])
@@ -457,7 +456,7 @@ def save_scheduled(conn: sqlite3.Connection, clean: dict, uid: str | None = None
 
 def delete_scheduled(conn: sqlite3.Connection, uid: str) -> None:
     conn.execute("DELETE FROM finance_scheduled WHERE uid = ?", (uid,))
-    conn.execute("DELETE FROM object_tags WHERE object_type = 'scheduled' AND object_id = ?", (uid,))
+    conn.execute("DELETE FROM object_labels WHERE object_type = 'scheduled' AND object_id = ?", (uid,))
     conn.execute("DELETE FROM object_contacts WHERE object_type = 'scheduled' AND object_id = ?", (uid,))
     conn.commit()
 

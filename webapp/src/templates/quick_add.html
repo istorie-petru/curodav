@@ -24,7 +24,7 @@
        switch. -->
 {% set default_tab = default_tab|default('task') %}
 {% set _kinds = [default_tab] if default_tab in ('contact', 'label') else ['task', 'event'] %}
-{% set _kind_meta = {'task': ('Task', 'check-square'), 'event': ('Event', 'calendar'), 'contact': ('Contact', 'user'), 'label': ('Shelf', 'tag')} %}
+{% set _kind_meta = {'task': ('Task', 'check-square'), 'event': ('Event', 'calendar'), 'contact': ('Contact', 'user'), 'label': ('Tag', 'tag')} %}
 {% call modal(kind="form", title=(('New ' ~ _kind_meta[_kinds[0]][0] | lower) if _kinds | length == 1 else 'New'), size="medium", form=default_tab ~ '-form', creating=(true), save_id='quick-add-save', save_icon='check-square') %}
 {% if _kinds | length > 1 %}{{ split_start('new-item') }}{% endif %}
 <div class="qa-create">
@@ -61,7 +61,7 @@
     </section>
     {% endif %}
     {% if 'label' in _kinds %}
-    <section class="quick-add-panel is-active" data-quick-add-panel="label" role="tabpanel" aria-label="New shelf">
+    <section class="quick-add-panel is-active" data-quick-add-panel="label" role="tabpanel" aria-label="New tag">
         {% set quick_add_kind = 'label' %}
         <form method="post" id="label-form" action="/settings/labels/create">
             {% include "_label_form_fields.html" %}

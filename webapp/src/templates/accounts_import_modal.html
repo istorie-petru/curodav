@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import password_input, upload_input %}
+{% block title %}Import{% endblock %}
+{% block content %}
+{% call modal(kind="form", title="Import accounts", size="small", form='accounts-import-form', save_label='Preview', save_icon='upload') %}
+<form method="post" action="/accounts/import" id="accounts-import-form" enctype="multipart/form-data" data-follow-redirect>
+    <div class="field-grid">
+        <div class="field field-wide"><label>File</label>{{ upload_input('file', accept='.kdbx,.csv,.json', form='accounts-import-form', label='Choose a file', large=True, formats='KeePass, CSV, Bitwarden JSON') }}</div>
+        <div class="field field-wide"><label>Its password</label>{{ password_input({'name': 'password', 'autocomplete': 'off'}) }}</div>
+        <div class="field field-wide"><label>Its key file</label>{{ upload_input('key_file', form='accounts-import-form', label='Choose a key file') }}</div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

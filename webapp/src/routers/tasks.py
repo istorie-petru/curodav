@@ -181,24 +181,25 @@ def _due_at_key(t: dict) -> str:
 
 
 def _build_task_groups(conn, open_tasks: list[dict], completed_tasks: list[dict], mode: str = "", today: str = "") -> list[dict]:
-    """The list's sections. By default open tasks are split by due date (Overdue, Today, This week, Later, No date); `shelf`
-    gives one section per shelf instead and `none` a single plain list. Completed tasks stay together in a trailing
-    section, newest change first. In the date and plain modes a task appears once; in `shelf` mode once per shelf.
+    """The list's sections. By default open tasks are split by due date (Overdue, Today, This week, Later, No date); `tag` or `space`
+    gives one section per tag or space instead and `none` a single plain list. Completed tasks stay together in a trailing
+    section, newest change first. In the date and plain modes a task appears once; in `tag` mode once per tag.
     `open_tasks` is pre-sorted by due date and each section keeps that order."""
     today = today or clock.today().isoformat()
     week_end = (date.fromisoformat(today) + timedelta(days=6)).isoformat()
     groups: list[dict] = []
-    if mode == "shelf":
-        shelves: dict[str, list[dict]] = {}
+    if mode in ("tag", "space"):
+        sections: dict[str, list[dict]] = {}
         loose: list[dict] = []
         for t in open_tasks:
-            for shelf in dict.fromkeys(i["label"] for i in t.get("tag_items") or []):
-                shelves.setdefault(shelf, []).append(t)
-            if not t.get("tag_items"):
+            names = [i["name"] for i in t.get("tag_items") or []] if mode == "tag" else ([t["space"]] if t.get("space") else [])
+            for name in dict.fromkeys(names):
+                sections.setdefault(name, []).append(t)
+            if not names:
                 loose.append(t)
-        groups = [{"kind": "label", "name": shelf, "tasks": members} for shelf, members in sorted(shelves.items(), key=lambda kv: kv[0].lower())]
+        groups = [{"kind": "label", "name": name, "tasks": members} for name, members in sorted(sections.items(), key=lambda kv: kv[0].lower())]
         if loose:
-            groups.append({"kind": "unassigned", "name": "No tag", "tasks": loose})
+            groups.append({"kind": "unassigned", "name": "No space" if mode == "space" else "No tag", "tasks": loose})
     elif mode == "none":
         if open_tasks:
             groups.append({"kind": "plain", "name": "", "tasks": open_tasks})
@@ -222,7 +223,7 @@ def _tasks_list_context(
     q: str | None = None,
     group: str = "",
 ) -> dict:
-    group = group if group in ("shelf", "none") else ""
+    group = group if group in ("tag", "space", "none") else ""
     """Build the full render context for the Table view -- now the *only*
         Tasks view. Shared between
         the full page (list_tasks) and the async-CRUD region fragment

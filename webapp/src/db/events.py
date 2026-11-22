@@ -12,6 +12,7 @@ from datetime import date, datetime
 from typing import Any
 
 from .core import ENTITY_SYNC_FIELDS, MultipleProjectLabelsError, _row_columns, _row_to_dict
+from .. import tags as tag_store
 from .labels import _attach_tags, _attach_tags_bulk, list_labels_for_object, list_object_label_names, list_project_labels, set_object_labels
 
 
@@ -37,6 +38,7 @@ def upsert_event(
     data["exclude_saturday"] = 1 if data.get("exclude_saturday") else 0
     data["exclude_sunday"] = 1 if data.get("exclude_sunday") else 0
     tags = data.pop("tags", None)
+    space = data.pop("space", None)
     if tags is not None:
         _reject_new_multiple_project_labels_on_event(conn, str(data.get("uid")), tags)
     data.pop("reminders", None)
@@ -65,6 +67,8 @@ def upsert_event(
     )
     if tags is not None:
         set_object_labels(conn, "event", data["uid"], tags)
+    if space is not None:
+        tag_store.apply_space(conn, "event", data["uid"], space)
     if record_server_write:
         record_server_sync_write(
             conn,

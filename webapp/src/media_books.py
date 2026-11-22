@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from . import book_speech
 from . import calibre_library as cl
 from . import db
 from .log import get_logger
@@ -101,7 +102,8 @@ def meta_for(conn: sqlite3.Connection, c: dict[str, Any], edition: dict[str, Any
     return cl.BookMeta(title=title, authors=[_display_name(a) for a in authors], author_sorts=[_sort_name(a) for a in authors],
                        pubdate=edition.get("year") or c.get("year") or "", publisher=edition.get("publisher") or "", isbn=edition.get("isbn") or "",
                        doi=edition.get("doi") or "", tags=list(c.get("keywords") or []), comments=c.get("summary") or "",
-                       rating=round(overall / 10) if overall else 0, series=c.get("series") or "", series_index=_number(c.get("volume")))
+                       rating=round(overall / 10) if overall else 0, series=c.get("series") or "", series_index=_number(c.get("volume")),
+                       languages=book_speech.to_calibre(edition.get("language") or ""))
 
 
 def _jpeg(webp_path: Path | None) -> bytes | None:
@@ -163,6 +165,8 @@ def _push(conn: sqlite3.Connection, lib: cl.Library | None, citation_uid: str) -
     for e in editions:
         meta = meta_for(conn, c, e)
         if e.get("calibre_uuid") and lib.book(e["calibre_uuid"]):
+            if not meta.languages:  # no language named here: Calibre's own stays
+                meta.languages = list(lib.book(e["calibre_uuid"]).get("languages") or [])
             lib.update_book(e["calibre_uuid"], meta)
         else:
             db.set_edition_calibre(conn, e["uid"], lib.add_book(meta), "")
@@ -411,6 +415,9 @@ def _pull_book(conn: sqlite3.Connection, e: dict[str, Any], book: dict[str, Any]
     db.save_edition(conn, e["citation_uid"], {**{k: e[k] for k in ("edition", "place", "url")}, "year": book["pubdate"][:4] or e["year"],
                                               "publisher": book["publisher"], "isbn": book["isbn"], "doi": book["doi"]}, e["uid"])
     db.set_edition_calibre(conn, e["uid"], book["uuid"], ",".join(f["format"] for f in book["formats"] if f["path"].is_file()))
+    named = book_speech.from_calibre(book.get("languages") or [])
+    if named and named != (e.get("language") or ""):  # Calibre's language is the language of the file
+        db.set_edition_language(conn, e["uid"], named)
     if not sole:
         return
     c = db.get_citation_raw(conn, e["citation_uid"])

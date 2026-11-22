@@ -465,18 +465,18 @@ class TestSettingsAutoArchive:
         # old home Settings > Advanced folded into it) reads
         # request.app.state.settings' db_path/backup_dir/radicale_base_url
         # -- needs the fuller fake request, not the bare one.
-        resp = settings_router.settings_data_maintenance(_request_with_app("/settings/data-maintenance", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
+        resp = settings_router.settings_tasks(_request_with_app("/settings/tasks", tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups"), conn=conn)
         body = resp.body.decode()
         assert 'action="/settings/task-auto-archive"' in body
         for value, label in settings_router.DAYS_CHOICES:
             assert f'value="{value}"' in body
             assert label in body
-        assert resp.context["task_auto_archive_days"] == "0"
+        assert resp.context["auto_archive_days"] == "0"
 
     def test_set_task_auto_archive_route(self, conn):
         resp = settings_router.set_task_auto_archive(days="30", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/data-maintenance"
+        assert resp.headers["location"] == "/settings/tasks"
         assert db.get_app_meta(conn, tasks_router.TASK_AUTO_ARCHIVE_DAYS_KEY) == "30"
 
     def test_set_task_auto_archive_rejects_unrecognized_values(self, conn):

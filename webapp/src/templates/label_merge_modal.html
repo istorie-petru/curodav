@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
-{% block title %}Merge shelf{% endblock %}
+{% block title %}Merge tag{% endblock %}
 {% block content %}
 {% call modal(kind="pick", title='Merge "' ~ name ~ '"', size="small", form='label-merge-form', save_label='Merge', save_icon='git-pull-request') %}
 <div class="card">
-<form method="post" id="label-merge-form" action="/settings/labels/{{ name|urlencode }}/merge" data-confirm-sheet="Merge &quot;{{ name }}&quot; into another shelf? Every object tagged with it moves to the destination and this shelf is removed." data-cc-change="label" data-cc-action="merge">
+<form method="post" id="label-merge-form" action="/settings/labels/{{ name|urlencode }}/merge" data-confirm-sheet="Merge &quot;{{ name }}&quot; into another tag? Every object tagged with it moves to the destination and this shelf is removed." data-cc-change="label" data-cc-action="merge">
     {% set ms_name = 'dest_name' %}
     {% set ms_mode = 'single' %}
     {% set ms_label = 'Merge into' %}

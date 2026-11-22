@@ -61,7 +61,7 @@ class TestSettingsTimeBlocksPage:
         resp = taxonomy_router.manage_calendar(_request(), view="time-blocks", conn=conn)
         assert resp.status_code == 200
         assert resp.context["view"] == "time_blocks"
-        assert resp.context["crumbs"] == [{"url": "/settings", "name": "Settings"}]
+        assert resp.context["crumbs"] == [{"url": "/settings/calendar", "name": "Calendar"}]
 
     def test_empty_state_when_no_blocks(self, conn):
         body = taxonomy_router.manage_calendar(_request(), view="time-blocks", conn=conn).body.decode()

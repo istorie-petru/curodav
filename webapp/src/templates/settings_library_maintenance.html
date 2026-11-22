@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_section_row.html" import section_row %}
+{% block title %}Maintenance - Library settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow("Maintenance", "wrench") }}
+<div class="settings-stack">
+{% if job and job.state %}
+{% call section_row('') %}Last job{% endcall %}
+<div class="card"><div class="settings-field-row"><span class="settings-field-label">{{ job.label or 'Last job' }}
+    <span class="settings-field-hint">{% if job.state == 'running' %}Running{% elif job.state == 'failed' %}Failed: {{ job.message }}{% else %}{{ job.message or 'Done' }}{% endif %}</span></span></div></div>
+{% endif %}
+{% call section_row('') %}Jobs{% endcall %}
+<div class="card">
+{% if calibre_ready %}
+    {% for j in jobs %}
+    <form class="settings-field-row" method="post" action="/settings/library/books/job" data-job-form{% if j.confirm %} data-confirm-sheet="{{ j.confirm }}"{% endif %}>
+        <input type="hidden" name="job" value="{{ j.key }}">
+        <span class="settings-field-label">{{ j.label }}<span class="settings-field-hint">{{ j.hint }}</span></span>
+        <span class="spacer"></span>
+        <button type="submit" class="btn ghost"{% if job and job.state == 'running' %} disabled{% endif %}>Run</button>
+    </form>
+    {% endfor %}
+{% else %}
+    <div class="settings-field-row"><span class="settings-field-label">No book library found<span class="settings-field-hint">Choose the library folder first</span></span></div>
+{% endif %}
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script defer src="{{ static_url('library_jobs.js') }}"></script>
+{% endblock %}

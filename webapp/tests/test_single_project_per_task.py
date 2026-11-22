@@ -193,37 +193,3 @@ class TestUpdateTaskFormRejectsAddingASecondProjectLabel:
         assert db.get_task(conn, "t1")["tags"] == ["Alpha"]
 
 
-class TestBulkAddLabelRejectsASecondProjectLabel:
-    def test_bulk_add_label_rejects_when_task_already_has_a_project_label(self, conn):
-        _make_project(conn, "Alpha")
-        _make_project(conn, "Beta")
-        _seed_task(conn, "t1", tags=["Alpha"])
-        resp = asyncio.run(tasks_router.bulk_action(
-            _json_request({"action": "tag", "uids": ["t1"], "tags": ["Beta"], "mode": "add"}),
-            conn=conn,
-        ))
-        assert resp.status_code == 400
-        assert db.get_task(conn, "t1")["tags"] == ["Alpha"]
-
-    def test_bulk_add_label_still_succeeds_for_tasks_without_a_conflict(self, conn):
-        _make_project(conn, "Alpha")
-        _make_project(conn, "Beta")
-        _seed_task(conn, "t1", tags=["Alpha"])  # would conflict
-        _seed_task(conn, "t2", tags=[])  # no conflict
-        resp = asyncio.run(tasks_router.bulk_action(
-            _json_request({"action": "tag", "uids": ["t1", "t2"], "tags": ["Beta"], "mode": "add"}),
-            conn=conn,
-        ))
-        assert resp.status_code == 400  # overall response still flags the failure
-        assert db.get_task(conn, "t1")["tags"] == ["Alpha"]  # rejected, unchanged
-        assert db.get_task(conn, "t2")["tags"] == ["Beta"]  # applied, no conflict
-
-    def test_bulk_add_ordinary_label_alongside_existing_project_label_still_works(self, conn):
-        _make_project(conn, "Alpha")
-        _seed_task(conn, "t1", tags=["Alpha"])
-        resp = asyncio.run(tasks_router.bulk_action(
-            _json_request({"action": "tag", "uids": ["t1"], "tags": ["Urgent"], "mode": "add"}),
-            conn=conn,
-        ))
-        assert resp.status_code == 200
-        assert sorted(db.get_task(conn, "t1")["tags"]) == ["Alpha", "Urgent"]

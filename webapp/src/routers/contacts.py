@@ -198,7 +198,7 @@ def _contacts_list_context(
     conn, request: Request, q: str | None, tags: list[str], filtered: bool, show: str = "", group: str = ""
 ) -> dict:
     show = show if show in ("archived", "all") else ""
-    group = group if group in ("shelf", "org") else ""
+    group = group if group in ("space", "tag", "org") else ""
     show_archived = bool(show)
     contacts = [_attach_photo_url(c) for c in db.list_contacts(conn, q=q, include_archived=show_archived)]
     if show == "archived":
@@ -224,7 +224,7 @@ def _contacts_list_context(
         "request": request,
         "active_tab": "contacts",
         "contacts": contacts,
-        "contact_groups": _group_contacts(contacts, group, {cfg["name"] for cfg in db.list_project_labels(conn)}),
+        "contact_groups": _group_contacts(contacts, group),
         "group": group,
         "group_mode": group,
         "q": q or "",
@@ -241,10 +241,12 @@ def _contacts_list_context(
     }
 
 
-def _group_contacts(contacts: list[dict], mode: str = "", project_names: set[str] | None = None) -> list[dict]:
-    """The list's sections: first letters by default, or one per shelf or organization. A contact sits in exactly one section."""
-    if mode == "shelf":
-        return _group_contacts_by_label(contacts, project_names)
+def _group_contacts(contacts: list[dict], mode: str = "") -> list[dict]:
+    """The list's sections: first letters by default, or one per space, tag or organization. A contact sits in exactly one section."""
+    if mode == "space":
+        return _group_contacts_by(contacts, lambda c: c.get("space"))
+    if mode == "tag":
+        return _group_contacts_by(contacts, lambda c: (c.get("tags") or [None])[0])
     ordered = sorted(contacts, key=lambda c: (c.get("full_name") or "").lower())
     buckets: dict[str, list[dict]] = {}
     for c in ordered:
@@ -260,30 +262,16 @@ def _group_contacts(contacts: list[dict], mode: str = "", project_names: set[str
     return groups
 
 
-def _group_contacts_by_label(contacts: list[dict], project_names: set[str] | None = None) -> list[dict]:
-    """same pattern Settings > Projects already uses for its
-        label groups") -- one `{"name": label, "contacts": [...]}` per label
-        actually in use, sorted alphabetically (ungrouped last, same
-        "ungrouped last" convention `routers/labels.py::_labels_context`
-        established), each a real Jinja bucket for _contacts_body.html's
-        section headings. A contact carries at most one label (item 16 --
-        "Contacts should only allow one label"), so this is a clean partition,
-        not a fan-out; within a group/the ungrouped bucket, contacts keep
-        whatever order `db.list_contacts` already returned them in (no new
-        sort -- out of this slice's scope).
-    """
-    project_names = project_names or set()
-    by_label: dict[str, list[dict]] = {}
-    unlabeled: list[dict] = []
+def _group_contacts_by(contacts: list[dict], key) -> list[dict]:
+    """One section per value of `key`, alphabetical, contacts without one last."""
+    buckets: dict[str, list[dict]] = {}
+    loose: list[dict] = []
     for c in contacts:
-        tag = next((t for t in (c.get("tags") or []) if t not in project_names), None)
-        if tag:
-            by_label.setdefault(tag, []).append(c)
-        else:
-            unlabeled.append(c)
-    groups = [{"name": name, "contacts": by_label[name]} for name in sorted(by_label, key=str.lower)]
-    if unlabeled:
-        groups.append({"name": None, "contacts": unlabeled})
+        value = key(c)
+        (buckets.setdefault(value, []) if value else loose).append(c)
+    groups = [{"name": name, "contacts": buckets[name]} for name in sorted(buckets, key=str.lower)]
+    if loose:
+        groups.append({"name": None, "contacts": loose})
     return groups
 
 

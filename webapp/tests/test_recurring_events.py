@@ -163,6 +163,8 @@ def _legacy(conn, uid="old", start="2026-10-05T09:00:00", end="2026-10-05T10:00:
 
 
 def test_the_migration_turns_a_legacy_repeating_event_into_rows(conn):
+    from src import tags
+    tags.add_tag(conn, "Work")
     _legacy(conn)
     db.upsert_event_occurrence_override(conn, {"master_uid": "old", "occurrence_date": "2026-10-12T09:00:00", "cancelled": True,
                                                "created_at": _now(), "updated_at": _now()})
@@ -293,7 +295,7 @@ def test_a_day_shift_that_would_split_an_every_other_week_rule_is_refused():
 def _tagged_series(conn, scope_rule="FREQ=WEEKLY;BYDAY=MO;COUNT=4"):
     from src import tags
     tags.ensure_schema(conn)
-    tags.add_default_tag(conn, "Work")
+    tags.add_tag(conn, "Work")
     calendar_router.create_event(
         title="Standup", description="", start_at="2026-10-05T09:00", end_at="2026-10-05T10:00", all_day="", location="",
         meeting_url="", tags="", item_tags=["Work"], item_tags_field="1", recurrence=scope_rule, reminders="",
@@ -317,10 +319,3 @@ def test_new_occurrences_added_at_the_horizon_copy_the_tag(conn):
     assert all(tags.tags_for_object(conn, "event", r["uid"]) == ["Work"] for r in later)
 
 
-def test_the_migration_gives_untagged_occurrences_the_series_tag(conn):
-    from src import tags
-    rows = _tagged_series(conn)
-    for r in rows[1:]:
-        conn.execute("DELETE FROM object_tags WHERE object_type = 'event' AND object_id = ?", (r["uid"],))
-    migrations._series_share_tags(conn)
-    assert all(tags.tags_for_object(conn, "event", r["uid"]) == ["Work"] for r in rows)

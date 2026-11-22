@@ -10,8 +10,8 @@ NAMES = {"book": "Book", "film": "Film"}
 
 
 def test_terms_become_filters_and_the_rest_stays_text():
-    out = library_query.parse('dune type:film status:reading year:2000-2010 author:"le guin" tag:x bogus:1', NAMES)
-    assert out["types"] == ["film"] and out["statuses"] == ["current"] and out["tags"] == ["x"]
+    out = library_query.parse('dune type:film status:reading year:2000-2010 author:"le guin" space:Uni bogus:1', NAMES)
+    assert out["types"] == ["film"] and out["statuses"] == ["current"] and out["spaces"] == ["Uni"]
     assert (out["year_lo"], out["year_hi"]) == (2000, 2010)
     assert out["text"] == "dune le guin bogus:1"
 

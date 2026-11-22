@@ -151,10 +151,12 @@ def add_object_label(conn: sqlite3.Connection, object_type: str, object_id: str,
     label_name = (label_name or "").strip()
     if not label_name:
         return
+    tags.check_space(conn, [*tags.tags_for_object(conn, object_type, object_id), label_name])
     conn.execute(
         "INSERT OR IGNORE INTO object_labels (object_type, object_id, label_name) VALUES (?, ?, ?)",
         (object_type, object_id, label_name),
     )
+    tags.sync_space(conn, object_type, object_id)
     conn.commit()
 
 
@@ -167,13 +169,10 @@ def remove_object_label(conn: sqlite3.Connection, object_type: str, object_id: s
 
 
 def set_object_labels(conn: sqlite3.Connection, object_type: str, object_id: str, label_names: list[str]) -> None:
-    """Replaces every label currently on (object_type, object_id) with
-        exactly `label_names` -- the common "save this object's label picker"
-        write shape, one transaction instead of a diff of adds/removes.
-    """
-    conn.execute(
-        "DELETE FROM object_labels WHERE object_type = ? AND object_id = ?", (object_type, object_id)
-    )
+    """Replaces every tag on (object_type, object_id) with exactly `label_names`, the one place an item's tags are written.
+    The tags must all be from one space (`tags.SpaceConflict` otherwise, nothing written); that space is stored on the item
+    and stays when its tags later go (tags.py)."""
+    names: list[str] = []
     seen: set[str] = set()
     queue = [(n or "").strip() for n in label_names or []]
     while queue:
@@ -181,11 +180,17 @@ def set_object_labels(conn: sqlite3.Connection, object_type: str, object_id: str
         if not name or name.lower() in seen:
             continue
         seen.add(name.lower())
-        name = _resolve_label_name(conn, name)
+        names.append(_resolve_label_name(conn, name))
+    tags.check_space(conn, names)
+    conn.execute(
+        "DELETE FROM object_labels WHERE object_type = ? AND object_id = ?", (object_type, object_id)
+    )
+    for name in names:
         conn.execute(
             "INSERT OR IGNORE INTO object_labels (object_type, object_id, label_name) VALUES (?, ?, ?)",
             (object_type, object_id, name),
         )
+    tags.sync_space(conn, object_type, object_id)
     conn.commit()
 
 
@@ -349,6 +354,7 @@ _LABEL_CONFIG_DEFAULTS: dict[str, Any] = {
     "notebook_widget": 1,
     "auto_labels": None,
     "managed_by": None,
+    "code": "",
 }
 
 # The labels-as-modules boolean flags -- normalized to 0/1 on write and to
@@ -407,13 +413,10 @@ def upsert_label_config(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     same "only touch what you're told to" convention as every setter in
     this file."""
     from .pages import page_types
-    tags.assert_writable(conn, row.get("name"))
-    if row.get("managed_by") and tags._managed_writer.get() != row["managed_by"]:
-        raise tags.ManagedLabelError(row.get("name"), row["managed_by"])
     cols = (
         "name", "color", "icon", "description", "parent_name", "label_group",
         "generate_space", "dashboard_preset_json", "abbreviation",
-        "is_project", "start_date", "end_date", "archived_at",
+        "is_project", "start_date", "end_date", "archived_at", "code",
         "created_at", *(c for c, _ in _LABEL_MODULE_COLUMNS),
     )
     existing = get_label_config(conn, row["name"]) or {}
@@ -680,15 +683,10 @@ def set_group_style(conn: sqlite3.Connection, group: str, icon: str | None, colo
     conn.commit()
 
 
-def set_group_sidebar(conn: sqlite3.Connection, group: str, show: bool, order: int, shelves: list[str], kind: str = "shelves") -> None:
-    """A space's sidebar entry: whether it appears, its position among spaces (0 = by name), and which member
-    shelves sit under its chevron (their `sidebar_pin`)."""
-    group = group.strip()
-    conn.execute("UPDATE label_groups SET sidebar_show = ?, sidebar_order = ?, sidebar_kind = ? WHERE name = ?",
-                 (1 if show else 0, max(0, min(int(order or 0), 999)), "tags" if kind == "tags" else "shelves", group))
-    wanted = {s.strip() for s in shelves if s and s.strip()}
-    for name in group_member_names(conn, group):
-        conn.execute("UPDATE label_config SET sidebar_pin = ? WHERE name = ?", (1 if name in wanted else 0, name))
+def set_group_sidebar(conn: sqlite3.Connection, group: str, show: bool, order: int) -> None:
+    """A space's sidebar entry: whether it appears and its position among spaces (0 = by name). It always lists all its tags."""
+    conn.execute("UPDATE label_groups SET sidebar_show = ?, sidebar_order = ? WHERE name = ?",
+                 (1 if show else 0, max(0, min(int(order or 0), 999)), group.strip()))
     conn.commit()
 
 
@@ -706,12 +704,21 @@ def create_group(conn: sqlite3.Connection, name: str, icon: str | None = None, c
     return name
 
 
+def _library_space(conn: sqlite3.Connection, old: str, new: str) -> None:
+    """Library entries filed under a space follow it when it is renamed, merged or deleted."""
+    try:
+        conn.execute("UPDATE citations SET space = ? WHERE space = ? COLLATE NOCASE", (new, old))
+    except sqlite3.OperationalError:  # a database without the library
+        pass
+
+
 def delete_group(conn: sqlite3.Connection, name: str) -> None:
     """Deletes a group: its labels become ungrouped (they are kept), its
     row goes. Its page storage (dashboard, banner) is left, the same
     "harmless leftover" rule rename_group's merge follows."""
     name = (name or "").strip()
     conn.execute("UPDATE label_config SET label_group = NULL WHERE TRIM(COALESCE(label_group, '')) = ? COLLATE NOCASE", (name,))
+    _library_space(conn, name, "")
     conn.execute("DELETE FROM label_groups WHERE name = ?", (name,))
     conn.commit()
 
@@ -747,6 +754,8 @@ def rename_group(conn: sqlite3.Connection, old: str, new: str) -> str:
         "UPDATE label_config SET label_group = ? WHERE TRIM(COALESCE(label_group, '')) = ? COLLATE NOCASE",
         (target or new, old),
     )
+    _library_space(conn, old, target or new)
+    tags.space_renamed(conn, old, target or new)
     if target is None:
         _move_page_storage(conn, group_page_key(old), group_page_key(new))
         conn.execute("UPDATE label_groups SET name = ? WHERE name = ?", (new, old))
@@ -766,7 +775,6 @@ def set_group_members(conn: sqlite3.Connection, group: str, members: list[str]) 
     group = (group or "").strip()
     wanted = [m.strip() for m in members if m and m.strip()]
     ensure_group(conn, group)
-    tags.assert_writable(conn, *wanted, *group_member_names(conn, group))
     for name in group_member_names(conn, group):
         if name not in wanted:
             conn.execute("UPDATE label_config SET label_group = NULL WHERE name = ?", (name,))
@@ -797,7 +805,6 @@ def project_status(conn: sqlite3.Connection, cfg: dict[str, Any], today: date | 
 
 def archive_project(conn: sqlite3.Connection, name: str) -> None:
     """Archives a label by hand; no date archives anything."""
-    tags.assert_writable(conn, name)
     conn.execute(
         "UPDATE label_config SET archived_at = ? WHERE name = ?",
         (datetime.now(timezone.utc).isoformat(), name),
@@ -807,7 +814,6 @@ def archive_project(conn: sqlite3.Connection, name: str) -> None:
 
 def unarchive_label(conn: sqlite3.Connection, name: str) -> None:
     """Restores an archived label; its dates stay as they were."""
-    tags.assert_writable(conn, name)
     conn.execute("UPDATE label_config SET archived_at = NULL WHERE name = ?", (name,))
     conn.commit()
 
@@ -836,7 +842,6 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
     (mirrors the old tag-rename behavior) rather than raising a
     unique-constraint error a plain form can't act on -- see merge_labels
     below for the actual merge semantics."""
-    tags.assert_writable(conn, old_name, new_name)
     old_name = (old_name or "").strip()
     new_name = (new_name or "").strip()
     if not old_name or not new_name or old_name == new_name:
@@ -848,7 +853,6 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
         conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
         conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
         conn.execute("UPDATE notebook_folder_readmes SET label_name = ? WHERE label_name = ?", (new_name, old_name))
-        tags.label_renamed(conn, old_name, new_name)
         conn.commit()
         return
     collision = new_name.lower() in {n.lower() for n in list_all_label_names(conn)} or bool(get_label_config(conn, new_name))
@@ -859,7 +863,6 @@ def rename_label(conn: sqlite3.Connection, old_name: str, new_name: str) -> None
     conn.execute("UPDATE label_config SET name = ? WHERE name = ?", (new_name, old_name))
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (new_name, old_name))
     conn.execute("UPDATE notebook_folder_readmes SET label_name = ? WHERE label_name = ?", (new_name, old_name))
-    tags.label_renamed(conn, old_name, new_name)
     conn.commit()
 
 
@@ -871,25 +874,12 @@ def merge_labels(conn: sqlite3.Connection, source_name: str, dest_name: str) -> 
     rows are the only "membership" a label has, so once those are
     repointed the source label has nothing left pointing at it, same
     "deleting" semantics as every other label removal in this app (§0.1)."""
-    tags.assert_writable(conn, source_name, dest_name)
     if source_name == dest_name:
         return
-    rows = conn.execute(
-        "SELECT object_type, object_id FROM object_labels WHERE label_name = ?", (source_name,)
-    ).fetchall()
-    for r in rows:
-        conn.execute(
-            "INSERT OR IGNORE INTO object_labels (object_type, object_id, label_name) VALUES (?, ?, ?)",
-            (r["object_type"], r["object_id"], dest_name),
-        )
-    conn.execute("DELETE FROM object_labels WHERE label_name = ?", (source_name,))
+    tags.label_removed(conn, source_name, into=dest_name)
     conn.execute("UPDATE label_config SET parent_name = ? WHERE parent_name = ?", (dest_name, source_name))
     conn.execute("DELETE FROM label_config WHERE name = ?", (source_name,))
-    tags.label_removed(conn, source_name, into=dest_name)
     conn.commit()
-    from .notebook import enforce_one_label_and_project
-
-    enforce_one_label_and_project(conn)
 
 
 def clear_label(conn: sqlite3.Connection, name: str) -> None:
@@ -899,7 +889,6 @@ def clear_label(conn: sqlite3.Connection, name: str) -> None:
         is harmless (per the plan), and there is no delete-a-label endpoint at
         all in this app.
     """
-    tags.assert_writable(conn, name)
     conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
     conn.commit()
 
@@ -914,10 +903,8 @@ def delete_label_config(conn: sqlite3.Connection, name: str) -> None:
         every other label removal in this app" for its own source label; this
         is that same pair of statements with no destination to repoint onto.
     """
-    tags.assert_writable(conn, name)
-    conn.execute("DELETE FROM object_labels WHERE label_name = ?", (name,))
-    conn.execute("DELETE FROM label_config WHERE name = ?", (name,))
     tags.label_removed(conn, name)
+    conn.execute("DELETE FROM label_config WHERE name = ?", (name,))
     conn.commit()
 
 

@@ -296,13 +296,8 @@ class TestSettingsDataMaintenancePage:
     def test_health_status_uses_status_pills_not_plain_text(self, conn, tmp_path):
         req = _request(path="/settings/data-maintenance", db_path=tmp_path / "cache.sqlite", backup_dir=tmp_path / "backups")
         body = settings_router.settings_data_maintenance(req, conn=conn).body.decode()
-        # New System Status cards replace the old Health status section.
-        # Database card: healthy (integrity OK) -> status-card healthy
-        assert 'status-card healthy' in body
-        # Sync card: not configured -> status-card unknown
-        assert 'status-card unknown' in body
-        # Backup card: no backup -> status-card unknown
-        assert body.count('status-card unknown') >= 2
+        # 2026-11-22: the status is three rows of the Status section, each with its actions in a menu.
+        assert "Healthy · " in body and "No backups yet" in body and "Actions for Sync" in body
 
     def test_backup_route_creates_a_backup_and_redirects(self, conn, tmp_path):
         backups_dir = tmp_path / "backups"
@@ -432,7 +427,7 @@ class TestDataMaintenanceRedesign2026_08_26:
         # direct request (minimal card text): the "Last backup:" label
         # prefix was dropped -- the meta line is just "<date> · <size>" now,
         # the status pill above it already says what state it's in.
-        assert re.search(r"status-card-meta[\s\S]{0,80}[A-Z][a-z]{2} \d{1,2}, \d{4}", body)
+        assert re.search(r"Not verified · [A-Z][a-z]{2} \d{1,2}, \d{4}", body)
         assert "Last backup:" not in body
         assert f">{backup['filename']}" not in body
         assert body.count(f'value="{backup["filename"]}"') == 2
@@ -469,27 +464,16 @@ class TestDataMaintenanceRedesign2026_08_26:
 
     def test_redesigned_dropdown_labels_render(self, conn, tmp_path):
         body = self._page(conn, tmp_path)
-        for label in ("After 1 week", "After 1 month", "Never", "Keep 30 days", "Keep 90 days", "Keep forever"):
+        for label in ("Keep 30 days", "Keep 90 days", "Keep forever"):
             assert label in body
 
-    def test_legacy_stored_value_stays_visible(self, conn, tmp_path):
-        # An install that picked "14 days" before the relabel still stores
-        # 14; the select must show that truthfully instead of silently
-        # displaying the first preset while storing something else.
-        db.set_app_meta(conn, "task_auto_archive_days", "14")
-        body = self._page(conn, tmp_path)
-        # 2026-09-25 (UI audit F14): the native <select> became the shared
-        # single-select dropdown -- the legacy value is the trigger's
-        # summary text and the one pre-checked radio.
-        assert '<span class="ms-summary">14 days (current)</span>' in body
-        assert re.search(r'name="days" value="14"\s+form="task-auto-archive-form"\s+checked', body)
 
     def test_no_native_selects_left(self, conn, tmp_path):
         # 2026-09-25 (UI audit F14): both lifecycle controls use the same
         # autosubmitting dropdown General/Appearance use, not <select>.
         body = self._page(conn, tmp_path)
         assert not re.search(r"<select\s", body)
-        assert body.count('data-ms-mode="single"') == 2
+        assert body.count('data-ms-mode="single"') == 1
         assert 'id="sync-retention-form"' in body and 'form="sync-retention-form"' in body
 
 

@@ -207,7 +207,6 @@ def delete_citation_media(conn: sqlite3.Connection, citation_uid: str) -> None:
                 (covers_dir(conn) / name).unlink(missing_ok=True)
     conn.execute("DELETE FROM citation_ratings WHERE citation_uid = ?", (citation_uid,))
     conn.execute("DELETE FROM media_progress_log WHERE citation_uid = ?", (citation_uid,))
-    conn.execute("DELETE FROM object_tags WHERE object_type = 'media' AND object_id = ?", (citation_uid,))
 
 
 # Covers

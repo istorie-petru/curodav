@@ -1,288 +1,333 @@
-"""App-wide tags (stored in `label_tags`, the older `tags` table of earlier versions is left alone): the boxes users apply to items (features/tags-groups-labels.md).
+"""Spaces and tags (features/spaces-and-tags.md).
 
-A tag always belongs to one label and has no page of its own: it is an alias of its label with its own identity. Every label has a default tag with the label's own name. `object_tags` links tags to tasks, events, notes, contacts and
-transactions. `plan_migration` reports what the one-off move from finance tags, projects and plain labels would
-do; `apply_migration` performs it. Neither runs at startup.
+There are two levels. A space is a row of `label_groups`. A tag is a row of `label_config` whose `label_group` names its
+space; every tag belongs to exactly one space. Items link to tags in `object_labels` (notes are spelled `notebook`
+there). Every item may also have a space of its own, kept in `object_spaces`, which is what the item's pill shows when it
+has no tag. The space is set by the tags an item carries (all of them from one space, or the change is refused with
+`SpaceConflict`), by naming it directly, and it stays when the tags are removed or deleted.
+
+Everything that writes an item's tags goes through `db.set_object_labels`, which calls `check_space` first and `sync_space`
+after, so the rules live here and nowhere else. The three-level code from before is kept in `tags_legacy.py` for the old
+numbered migrations only.
 """
 
 from __future__ import annotations
 
-import contextlib
-import contextvars
 import sqlite3
-from datetime import datetime, timezone
 from typing import Any
 
-SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS label_tags (
-    name TEXT PRIMARY KEY COLLATE NOCASE,
-    label_name TEXT NOT NULL,
-    color TEXT NOT NULL DEFAULT 'gray',
-    icon TEXT NOT NULL DEFAULT '',
-    created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS object_tags (
+SPACE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS object_spaces (
     object_type TEXT NOT NULL,
     object_id TEXT NOT NULL,
-    tag_name TEXT NOT NULL COLLATE NOCASE,
-    PRIMARY KEY (object_type, object_id, tag_name)
+    space TEXT NOT NULL COLLATE NOCASE,
+    PRIMARY KEY (object_type, object_id)
 );
-CREATE INDEX IF NOT EXISTS idx_object_tags_tag ON object_tags(tag_name, object_type);
+CREATE INDEX IF NOT EXISTS idx_object_spaces_space ON object_spaces(space, object_type);
 """
-OBJECT_TYPES = ("task", "event", "note", "contact", "transaction", "scheduled", "media")
-LABEL_OBJECT_TYPES = ("task", "event", "contact", "notebook")  # object_labels spells notes "notebook"
-FINANCE_LABEL, FINANCE_GROUP = "Finance", "Personal"
+KIND = {"note": "notebook"}  # object_labels spells notes "notebook"
+OBJECT_TYPES = ("task", "event", "notebook", "contact", "transaction", "scheduled")
+OTHER_SPACE = "Other"
 
 
-class ManagedLabelError(ValueError):
-    """A shelf managed by a module was changed by someone other than that module."""
+class SpaceConflict(ValueError):
+    """An item was given tags from more than one space."""
 
-    def __init__(self, label_name: str, module_key: str):
-        from . import modules
-
-        module = modules.get(module_key)
-        super().__init__(f'"{label_name}" is managed by the {module.title} module. Change it in its settings ({module.settings_url}).')
-        self.label_name, self.module_key = label_name, module_key
+    def __init__(self, spaces: list[str]):
+        self.spaces = spaces
+        super().__init__(f"An item sits in one space only, and these tags are from {' and '.join(spaces)}")
 
 
-_managed_writer: contextvars.ContextVar[str | None] = contextvars.ContextVar("managed_writer", default=None)
+def _kind(object_type: str) -> str:
+    return KIND.get(object_type, object_type)
 
 
-@contextlib.contextmanager
-def managed_writes(module_key: str):
-    """Lets the named module change the shelves it manages; every other caller is refused."""
-    token = _managed_writer.set(module_key)
-    try:
-        yield
-    finally:
-        _managed_writer.reset(token)
-
-
-def managed_by(conn: sqlite3.Connection, label_name: str) -> str | None:
-    try:
-        row = conn.execute("SELECT managed_by FROM label_config WHERE name = ? COLLATE NOCASE", (label_name,)).fetchone() if label_name else None
-    except sqlite3.OperationalError:  # a database from before the column existed
-        return None
-    return (row[0] or None) if row else None
-
-
-def assert_writable(conn: sqlite3.Connection, *label_names: str) -> None:
-    """Raises ManagedLabelError when a named shelf is managed by a module other than the current writer."""
-    for name in label_names:
-        owner = managed_by(conn, name)
-        if owner and _managed_writer.get() != owner:
-            raise ManagedLabelError(name, owner)
-
-
-def set_managed_by(conn: sqlite3.Connection, label_name: str, module_key: str | None) -> None:
-    """Marks a shelf as managed by a module (or clears the mark); only the module itself may do either."""
-    assert_writable(conn, label_name)
-    conn.execute("UPDATE label_config SET managed_by = ? WHERE name = ?", (module_key, label_name))
-    conn.commit()
+def _has(conn: sqlite3.Connection, table: str) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone() is not None
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA_SQL)
+    conn.executescript(SPACE_TABLE_SQL)
+    if "code" not in {r[1] for r in conn.execute("PRAGMA table_info(label_config)")}:
+        conn.execute("ALTER TABLE label_config ADD COLUMN code TEXT NOT NULL DEFAULT ''")
 
 
-def restore(conn: sqlite3.Connection, label_name: str) -> None:
-    assert_writable(conn, label_name)
-    conn.execute("UPDATE label_config SET archived_at = NULL WHERE name = ?", (label_name,))
+# ---------------------------------------------------------------- tags
+
+def get_tag(conn: sqlite3.Connection, name: str) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM label_config WHERE name = ? COLLATE NOCASE", ((name or "").strip(),)).fetchone()
+    return _tag(dict(row)) if row else None
+
+
+def _tag(row: dict[str, Any]) -> dict[str, Any]:
+    return {**row, "space": (row.get("label_group") or "").strip(), "color": row.get("color") or "blue", "icon": row.get("icon") or ""}
+
+
+def list_tags(conn: sqlite3.Connection, space: str | None = None) -> list[dict[str, Any]]:
+    """Every tag with how many items carry it, by space then name; one space's tags when `space` is given."""
+    usage = {r["label_name"]: r["n"] for r in conn.execute("SELECT label_name, COUNT(*) AS n FROM object_labels GROUP BY label_name")}
+    rows = conn.execute("SELECT * FROM label_config ORDER BY label_group COLLATE NOCASE, name COLLATE NOCASE")
+    out = [{**_tag(dict(r)), "usage": usage.get(r["name"], 0)} for r in rows]
+    return [t for t in out if space is None or t["space"].lower() == space.lower()]
+
+
+def tags_of_code(conn: sqlite3.Connection, code: str) -> list[dict[str, Any]]:
+    """The tags carrying a University semester's identification code."""
+    return [_tag(dict(r)) for r in conn.execute("SELECT * FROM label_config WHERE code = ? COLLATE NOCASE AND code != '' ORDER BY name COLLATE NOCASE", (code,))]
+
+
+def tags_of_space(conn: sqlite3.Connection, space: str) -> list[dict[str, Any]]:
+    return list_tags(conn, space)
+
+
+def add_tag(conn: sqlite3.Connection, name: str, space: str = "Personal", color: str = "gray", icon: str = "") -> None:
+    """Makes a tag in a space (and the space, when it is new) unless a tag of that name exists."""
+    name = (name or "").strip()
+    if not name or get_tag(conn, name):
+        return
+    conn.execute("INSERT OR IGNORE INTO label_groups (name, color, created_at) VALUES (?, 'gray', datetime('now'))", (space,))
+    conn.execute("INSERT INTO label_config (name, color, icon, label_group, created_at) VALUES (?, ?, ?, ?, datetime('now'))", (name, color or "gray", icon or "", space))
     conn.commit()
 
 
-def list_tags(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    usage = {r["tag_name"]: r["n"] for r in conn.execute("SELECT tag_name, COUNT(*) AS n FROM object_tags GROUP BY tag_name")}
-    rows = conn.execute("SELECT * FROM label_tags ORDER BY label_name COLLATE NOCASE, name COLLATE NOCASE")
-    return [{**dict(r), "usage": usage.get(r["name"], 0)} for r in rows]
+def tag_styles(conn: sqlite3.Connection) -> dict[str, dict[str, str]]:
+    """Colour and icon by tag name, for drawing tag pills in tables."""
+    return {r["name"]: {"color": r["color"] or "gray", "icon": r["icon"] or ""} for r in conn.execute("SELECT name, color, icon FROM label_config")}
 
+
+def space_look(conn: sqlite3.Connection, space: str) -> dict[str, str]:
+    row = conn.execute("SELECT name, color, icon FROM label_groups WHERE name = ? COLLATE NOCASE", (space,)).fetchone()
+    return {"name": row["name"], "color": row["color"] or "gray", "icon": row["icon"] or "layers"} if row else {"name": space, "color": "gray", "icon": "layers"}
+
+
+def name_taken(conn: sqlite3.Connection, name: str, space: str | None = None) -> bool:
+    """A tag name is unique within its space, so two spaces may each have a tag of that name. Without `space`, any tag of the name counts."""
+    if space is None:
+        return conn.execute("SELECT 1 FROM label_config WHERE name = ? COLLATE NOCASE", (name,)).fetchone() is not None
+    return conn.execute("SELECT 1 FROM label_config WHERE name = ? COLLATE NOCASE AND COALESCE(label_group, '') = ? COLLATE NOCASE", (name, space)).fetchone() is not None
+
+
+# ---------------------------------------------------------------- items: tags
 
 def tags_for_object(conn: sqlite3.Connection, object_type: str, object_id: str) -> list[str]:
-    rows = conn.execute("SELECT tag_name FROM object_tags WHERE object_type = ? AND object_id = ? ORDER BY tag_name COLLATE NOCASE",
-                        (object_type, object_id))
-    return [r["tag_name"] for r in rows]
+    rows = conn.execute("SELECT label_name FROM object_labels WHERE object_type = ? AND object_id = ? ORDER BY label_name COLLATE NOCASE",
+                        (_kind(object_type), object_id))
+    return [r["label_name"] for r in rows]
+
+
+def spaces_of(conn: sqlite3.Connection, names: list[str]) -> list[str]:
+    """The distinct spaces the named tags belong to, in the spaces' own spelling; a tag with no space adds none."""
+    seen: dict[str, str] = {}
+    for name in names:
+        tag = get_tag(conn, name)
+        if tag and tag["space"]:
+            seen.setdefault(tag["space"].lower(), tag["space"])
+    return sorted(seen.values(), key=str.lower)
+
+
+def check_space(conn: sqlite3.Connection, names: list[str]) -> str | None:
+    """The one space these tags give an item, or None when none of them has a space; raises SpaceConflict for two or more."""
+    spaces = spaces_of(conn, names)
+    if len(spaces) > 1:
+        raise SpaceConflict(spaces)
+    return spaces[0] if spaces else None
+
+
+def item_space(conn: sqlite3.Connection, object_type: str, object_id: str) -> str | None:
+    row = conn.execute("SELECT space FROM object_spaces WHERE object_type = ? AND object_id = ?", (_kind(object_type), object_id)).fetchone()
+    return row["space"] if row else None
+
+
+def set_item_space(conn: sqlite3.Connection, object_type: str, object_id: str, space: str | None) -> None:
+    """Gives an item a space directly (or clears it). The item's tags must all be from that space."""
+    space = (space or "").strip() or None
+    if space and any(s.lower() != space.lower() for s in spaces_of(conn, tags_for_object(conn, object_type, object_id))):
+        raise SpaceConflict([space, *spaces_of(conn, tags_for_object(conn, object_type, object_id))])
+    kind = _kind(object_type)
+    if space:
+        conn.execute("INSERT INTO object_spaces (object_type, object_id, space) VALUES (?, ?, ?) "
+                     "ON CONFLICT(object_type, object_id) DO UPDATE SET space = excluded.space", (kind, object_id, space))
+    else:
+        conn.execute("DELETE FROM object_spaces WHERE object_type = ? AND object_id = ?", (kind, object_id))
+    conn.commit()
+
+
+def apply_space(conn: sqlite3.Connection, object_type: str, object_id: str, space: str) -> None:
+    """A space that arrived with an item (a sync client's X-CURODAV-SPACE, an API write): kept when the space exists and the
+    item's tags do not already put it elsewhere. Anything else is ignored, so a client can never make a space."""
+    found = conn.execute("SELECT name FROM label_groups WHERE name = ? COLLATE NOCASE", ((space or "").strip(),)).fetchone()
+    if found and not any(s.lower() != found["name"].lower() for s in spaces_of(conn, tags_for_object(conn, object_type, object_id))):
+        set_item_space(conn, object_type, object_id, found["name"])
+
+
+def sync_space(conn: sqlite3.Connection, object_type: str, object_id: str) -> None:
+    """After an item's tags changed: when they give it a space, that is its space; when they give none (the tags were removed or
+    deleted), the space it had stays. The caller commits."""
+    space = check_space(conn, tags_for_object(conn, object_type, object_id))
+    if space:
+        conn.execute("INSERT INTO object_spaces (object_type, object_id, space) VALUES (?, ?, ?) "
+                     "ON CONFLICT(object_type, object_id) DO UPDATE SET space = excluded.space", (_kind(object_type), object_id, space))
+
+
+def items_in_space(conn: sqlite3.Connection, space: str, object_type: str) -> list[str]:
+    return [r["object_id"] for r in conn.execute("SELECT object_id FROM object_spaces WHERE space = ? AND object_type = ?", (space, _kind(object_type)))]
+
+
+def space_counts(conn: sqlite3.Connection, space: str) -> dict[str, int]:
+    return {r["object_type"]: r["n"] for r in conn.execute(
+        "SELECT object_type, COUNT(*) AS n FROM object_spaces WHERE space = ? COLLATE NOCASE GROUP BY object_type", (space,))}
 
 
 def set_object_tags(conn: sqlite3.Connection, object_type: str, object_id: str, names: list[str]) -> list[str]:
-    """Replaces an item's tags. Every name must already be a tag."""
-    if object_type not in OBJECT_TYPES:
+    """Replaces an item's tags. Every name must already be a tag, and all must be from one space."""
+    kind = _kind(object_type)
+    if kind not in OBJECT_TYPES:
         raise ValueError(f"tags are not available on {object_type}")
-    known = {r["name"].lower(): r["name"] for r in conn.execute("SELECT name FROM label_tags")}
+    known = {t["name"].lower(): t["name"] for t in list_tags(conn)}
     wanted = list(dict.fromkeys(n.strip().lower() for n in names if n and n.strip()))
     missing = [n for n in wanted if n not in known]
     if missing:
         raise ValueError(f"unknown tags: {', '.join(missing)}")
-    conn.execute("DELETE FROM object_tags WHERE object_type = ? AND object_id = ?", (object_type, object_id))
-    for key in wanted:
-        conn.execute("INSERT OR IGNORE INTO object_tags (object_type, object_id, tag_name) VALUES (?, ?, ?)",
-                     (object_type, object_id, known[key]))
-    conn.commit()
-    return tags_for_object(conn, object_type, object_id)
-
-
-def tags_of_label(conn: sqlite3.Connection, label_name: str) -> list[dict[str, Any]]:
-    if not _has(conn, "label_tags"):
-        return []
-    return [dict(r) for r in conn.execute("SELECT * FROM label_tags WHERE label_name = ? ORDER BY name COLLATE NOCASE", (label_name,))]
-
-
-def get_tag(conn: sqlite3.Connection, name: str) -> dict[str, Any] | None:
-    row = conn.execute("SELECT * FROM label_tags WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
-    return dict(row) if row else None
-
-
-def name_taken(conn: sqlite3.Connection, name: str, allow_label: str | None = None) -> bool:
-    """Tags and labels share one namespace. `allow_label` is the label a same-named default tag may sit under."""
-    if conn.execute("SELECT 1 FROM label_tags WHERE name = ? COLLATE NOCASE", (name,)).fetchone():
-        return True
-    other = conn.execute("SELECT name FROM label_config WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
-    return bool(other) and (other["name"] or "").lower() != (allow_label or "").lower()
-
-
-def add_default_tag(conn: sqlite3.Connection, label_name: str, color: str = "gray", icon: str = "") -> None:
-    """The same-named tag a new label gets once; after this nothing is synced between the two."""
-    ensure_schema(conn)
-    conn.execute("INSERT OR IGNORE INTO label_tags (name, label_name, color, icon, created_at) VALUES (?, ?, ?, ?, ?)",
-                 (label_name, label_name, color or "gray", icon or "", datetime.now(timezone.utc).isoformat()))
-    conn.commit()
-
-
-def parse_rows(form) -> list[dict[str, Any]]:
-    """The tag rows of a label form: `tag_idx` lists the row numbers; each row has tag_old_N, tag_name_N, tag_color_N,
-    tag_icon_N and tag_del_N."""
-    rows = []
-    for i in form.getlist("tag_idx"):
-        rows.append({"old": (form.get(f"tag_old_{i}") or "").strip(), "name": (form.get(f"tag_name_{i}") or "").strip(),
-                     "color": (form.get(f"tag_color_{i}") or "gray").strip(), "icon": (form.get(f"tag_icon_{i}") or "").strip(),
-                     "delete": form.get(f"tag_del_{i}") == "1"})
-    return rows
-
-
-def validate_rows(conn: sqlite3.Connection, label_name: str, rows: list[dict[str, Any]]) -> str | None:
-    """An error message, or None. Checked before anything is saved."""
-    own = tags_of_label(conn, label_name)
-    leaving = {r["old"].lower() for r in rows if r["old"]}
-    kept = [r for r in rows if not r["delete"] and r["name"]]
-    seen: set[str] = set()
-    for r in kept:
-        key = r["name"].lower()
-        if key in seen:
-            return f"Two tags are named {r['name']}"
-        seen.add(key)
-        if key in leaving:
-            continue
-        if name_taken(conn, r["name"], allow_label=label_name if not own else None):
-            return f"A tag or label named {r['name']} already exists"
-    for r in rows:
-        if r["old"] and not r["name"] and not r["delete"]:
-            return "A tag needs a name"
-    remaining = len([t for t in own if t["name"].lower() not in {r["old"].lower() for r in rows if r["delete"]}]) + len([r for r in kept if not r["old"]])
-    if own and remaining < 1:
-        return "A shelf keeps at least one tag"
-    return None
-
-
-def apply_rows(conn: sqlite3.Connection, label_name: str, rows: list[dict[str, Any]], colors) -> None:
-    assert_writable(conn, label_name)
-    """Deletes, renames/restyles and creates the tags of a label as one change."""
-    now = datetime.now(timezone.utc).isoformat()
-    for r in rows:
-        if r["old"] and r["delete"]:
-            conn.execute("DELETE FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (r["old"],))
-            conn.execute("DELETE FROM label_tags WHERE name = ? COLLATE NOCASE AND label_name = ?", (r["old"], label_name))
-    for r in rows:
-        if r["delete"] or not r["name"]:
-            continue
-        color = r["color"] if r["color"] in colors else "gray"
-        if r["old"]:
-            conn.execute("UPDATE label_tags SET name = ?, color = ?, icon = ? WHERE name = ? COLLATE NOCASE AND label_name = ?",
-                         (r["name"], color, r["icon"], r["old"], label_name))
-            if r["old"] != r["name"]:
-                conn.execute("UPDATE OR IGNORE object_tags SET tag_name = ? WHERE tag_name = ? COLLATE NOCASE", (r["name"], r["old"]))
-        else:
-            conn.execute("INSERT INTO label_tags (name, label_name, color, icon, created_at) VALUES (?, ?, ?, ?, ?)",
-                         (r["name"], label_name, color, r["icon"], now))
-    conn.commit()
-
-
-def move_error(conn: sqlite3.Connection, name: str, dest: str) -> str | None:
-    """Why a tag cannot go to another shelf, or None. A shelf keeps at least one tag, so its last tag stays."""
-    tag = get_tag(conn, name)
-    if not tag:
-        return f"There is no tag named {name}"
-    for shelf in (tag["label_name"], dest):
-        if managed_by(conn, shelf):
-            return str(ManagedLabelError(shelf, managed_by(conn, shelf)))
-    if not dest or not conn.execute("SELECT 1 FROM label_config WHERE name = ?", (dest,)).fetchone():
-        return "Choose a shelf to move the tag to"
-    if dest == tag["label_name"]:
-        return f"{tag['name']} is already on the shelf {dest}"
-    if len(tags_of_label(conn, tag["label_name"])) < 2:
-        return f"{tag['name']} is the only tag of {tag['label_name']}, and a shelf keeps at least one tag"
-    return None
-
-
-def _follow_shelves(conn: sqlite3.Connection, items: list[Any]) -> None:
+    chosen = [known[k] for k in wanted]
     from . import db
 
-    kinds = {"note": "notebook"}
-    for r in items:
-        if kinds.get(r["object_type"], r["object_type"]) in LABEL_OBJECT_TYPES:
-            kind = kinds.get(r["object_type"], r["object_type"])
-            db.set_object_labels(conn, kind, r["object_id"], labels_of(conn, tags_for_object(conn, r["object_type"], r["object_id"])))
+    db.set_object_labels(conn, kind, object_id, chosen)
+    return tags_for_object(conn, kind, object_id)
 
 
-def move_tag(conn: sqlite3.Connection, name: str, dest: str) -> None:
-    """Files a tag under another shelf. Its items keep it, and their shelf links follow: they gain the new shelf and leave
-    the old one unless another of their tags still sits there."""
+def record(conn: sqlite3.Connection, object_type: str, object_id: str, names: list[str]) -> None:
+    """Stores the picked tags on an item; a name that is not a tag is left out (tags are never made on the fly)."""
+    if _kind(object_type) not in OBJECT_TYPES:
+        return
+    set_object_tags(conn, object_type, object_id, [n for n in names if get_tag(conn, n)])
+
+
+def labels_of(conn: sqlite3.Connection, names: list[str], keep_unknown: bool = False) -> list[str]:
+    """The picked names in the tags' own spelling. A name that is not a tag is dropped, unless `keep_unknown` is set."""
+    out: list[str] = []
+    for name in names:
+        tag = get_tag(conn, name)
+        picked = tag["name"] if tag else (name.strip() if keep_unknown and name and name.strip() else None)
+        if picked and picked not in out:
+            out.append(picked)
+    return out
+
+
+def bulk_change(conn: sqlite3.Connection, object_type: str, object_id: str, labels: list[str],
+                add: list[str] = (), remove: list[str] = (), single: bool = False) -> list[str]:
+    """Adds and removes tags on one item for a bulk edit and returns its new tag list."""
+    current = tags_for_object(conn, object_type, object_id) or list(labels)
+    gone = {r.lower() for r in remove}
+    wanted = [t for t in current if t.lower() not in gone]
+    for name in add:
+        if name and name.lower() not in {w.lower() for w in wanted}:
+            wanted = [name] if single else wanted + [name]
+    record(conn, object_type, object_id, wanted)
+    return labels_of(conn, wanted, keep_unknown=True)
+
+
+def attach_items(conn: sqlite3.Connection, object_type: str, dicts: list[dict[str, Any]]) -> None:
+    """Gives each item dict `tag_items`: its tags with their colour and icon, for every pill and colour in the app. An item
+    with no tag but a space gets one entry that stands for the space (`is_space`), so it never shows as untagged."""
+    if not dicts:
+        return
+    kind = _kind(object_type)
+    cfg = {r["name"].lower(): dict(r) for r in conn.execute("SELECT name, color, icon, label_group, code FROM label_config")}
+    spaces: dict[str, str] = {}
+    ids = [d["uid"] for d in dicts]
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        marks = ", ".join("?" for _ in chunk)
+        for r in conn.execute(f"SELECT object_id, space FROM object_spaces WHERE object_type = ? AND object_id IN ({marks})", (kind, *chunk)):
+            spaces[r["object_id"]] = r["space"]
+    looks: dict[str, dict[str, str]] = {}
+    for d in dicts:
+        names = d.get("tags") or []
+        items = []
+        for n in names:
+            base = cfg.get(n.lower(), {})
+            items.append({"name": n, "color": base.get("color") or "blue", "icon": base.get("icon") or "", "space": (base.get("label_group") or "").strip(),
+                          "code": base.get("code") or ""})
+        if not items and spaces.get(d["uid"]):
+            space = spaces[d["uid"]]
+            look = looks.setdefault(space.lower(), space_look(conn, space))
+            items = [{"name": look["name"], "color": look["color"], "icon": look["icon"], "space": look["name"], "is_space": True}]
+        d["tag_items"] = sorted(items, key=lambda t: t["name"].lower())
+        d["space"] = spaces.get(d["uid"]) or ((items[0]["space"] or None) if items else None)
+
+
+def picker(conn: sqlite3.Connection, object_type: str, object_id: str, old_labels: list[str]) -> dict[str, Any]:
+    """The Tag dropdown's options and the item's current picks. Archived tags are offered only when the item already carries them."""
+    chosen = tags_for_object(conn, object_type, object_id) if object_id else []
+    selected = chosen or [n for n in old_labels if n]
+    rows = list_tags(conn)
+    names = {t["name"] for t in rows if not t.get("archived_at")} | set(selected)
+    by = {t["name"]: t for t in rows}
+    items = [{"uid": n, "name": n, "color": by.get(n, {}).get("color") or "gray", "icon": by.get(n, {}).get("icon") or "", "space": by.get(n, {}).get("space") or ""}
+             for n in sorted(names, key=str.lower)]
+    return {"items": items, "selected": selected}
+
+
+def filter_items(conn: sqlite3.Connection, object_type: str, items: list[dict[str, str]], *, lowercase_values: bool = False) -> list[dict[str, str]]:
+    """A tag filter's options: every tag carried by an item of this type. Space entries stay as they are."""
+    kind = _kind(object_type)
+    linked = [r[0] for r in conn.execute("SELECT DISTINCT label_name FROM object_labels WHERE object_type = ?", (kind,))]
+    names = sorted({i["name"] for i in items if i.get("section") == "label"} | set(linked), key=str.lower)
+    kept = [i for i in items if i.get("section") != "label"]
+    return kept + [{"value": n.lower() if lowercase_values else n, "name": n, "section": "label"} for n in names]
+
+
+def matcher(conn: sqlite3.Connection, object_type: str, values) -> Any:
+    """A predicate over item dicts (`uid`, `tags`) for a filter selection of tag names and `group:<space>` entries. An item
+    matches a tag when it carries it, and a space when it carries one of its tags or sits in it with none."""
+    from . import db
+    from .db.labels import GROUP_KEY_PREFIX
+
+    kind = _kind(object_type)
+    picked = [(v or "").strip() for v in values if (v or "").strip()]
+    spaces = {v[len(GROUP_KEY_PREFIX):].strip().lower() for v in picked if v.lower().startswith(GROUP_KEY_PREFIX)}
+    wanted = {v.lower() for v in picked if not v.lower().startswith(GROUP_KEY_PREFIX)}
+    in_space: set[str] = set()
+    for space in spaces:
+        in_space |= set(items_in_space(conn, space, kind))
+    tags_of = db.expand_label_filter(conn, [v for v in picked if v.lower().startswith(GROUP_KEY_PREFIX)])
+
+    def match(item: dict[str, Any]) -> bool:
+        carried = {(t or "").lower() for t in item.get("tags") or []}
+        return bool(carried & wanted) or bool(carried & tags_of) or item["uid"] in in_space
+
+    return match
+
+
+# ---------------------------------------------------------------- tags being changed
+
+def label_removed(conn: sqlite3.Connection, name: str, into: str | None = None) -> None:
+    """A tag is deleted or merged into another. Items that carried it keep their space, because the space was stored when the tag
+    was set; a merge hands the links to the tag it went into."""
+    items = [(r["object_type"], r["object_id"]) for r in conn.execute("SELECT object_type, object_id FROM object_labels WHERE label_name = ? COLLATE NOCASE", (name,))]
     tag = get_tag(conn, name)
-    assert_writable(conn, tag["label_name"], dest)
-    conn.execute("UPDATE label_tags SET label_name = ? WHERE name = ? COLLATE NOCASE", (dest, tag["name"]))
-    _follow_shelves(conn, conn.execute("SELECT object_type, object_id FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (tag["name"],)).fetchall())
+    for kind, uid in items:  # make sure the space is stored before the link goes
+        if tag and tag["space"] and not item_space(conn, kind, uid):
+            conn.execute("INSERT INTO object_spaces (object_type, object_id, space) VALUES (?, ?, ?)", (kind, uid, tag["space"]))
+    if into:
+        conn.execute("INSERT OR IGNORE INTO object_labels (object_type, object_id, label_name) SELECT object_type, object_id, ? FROM object_labels WHERE label_name = ? COLLATE NOCASE", (into, name))
+    conn.execute("DELETE FROM object_labels WHERE label_name = ? COLLATE NOCASE", (name,))
     conn.commit()
 
 
-def merge_error(conn: sqlite3.Connection, name: str, dest: str) -> str | None:
-    """Why a tag cannot be merged onto another, or None. A shelf keeps at least one tag, so the last tag of a shelf can only
-    be merged onto a tag of the same shelf."""
-    tag = get_tag(conn, name)
-    if not tag:
-        return f"There is no tag named {name}"
-    target = get_tag(conn, dest) if dest else None
-    if not target:
-        return "Choose a tag to merge into"
-    if target["name"].lower() == tag["name"].lower():
-        return f"{tag['name']} cannot be merged into itself"
-    for shelf in {tag["label_name"], target["label_name"]}:
-        if managed_by(conn, shelf):
-            return str(ManagedLabelError(shelf, managed_by(conn, shelf)))
-    if target["label_name"] != tag["label_name"] and len(tags_of_label(conn, tag["label_name"])) < 2:
-        return f"{tag['name']} is the only tag of {tag['label_name']}, and a shelf keeps at least one tag"
-    return None
+def space_renamed(conn: sqlite3.Connection, old: str, new: str) -> None:
+    """Items and library entries filed under a space follow it when it is renamed or merged into another."""
+    for statement in ("UPDATE object_spaces SET space = ? WHERE space = ? COLLATE NOCASE",
+                      "UPDATE citations SET space = ? WHERE space = ? COLLATE NOCASE"):
+        try:
+            conn.execute(statement, (new, old))
+        except sqlite3.OperationalError:
+            pass
 
 
-def merge_tags(conn: sqlite3.Connection, name: str, dest: str) -> None:
-    """Everything tagged with `name` gets `dest` instead, then `name` is removed. Shelf links follow as in move_tag."""
-    tag, target = get_tag(conn, name), get_tag(conn, dest)
-    assert_writable(conn, tag["label_name"], target["label_name"])
-    items = conn.execute("SELECT object_type, object_id FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (tag["name"],)).fetchall()
-    conn.execute("INSERT OR IGNORE INTO object_tags (object_type, object_id, tag_name) "
-                 "SELECT object_type, object_id, ? FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (target["name"], tag["name"]))
-    conn.execute("DELETE FROM object_tags WHERE tag_name = ? COLLATE NOCASE", (tag["name"],))
-    conn.execute("DELETE FROM label_tags WHERE name = ? COLLATE NOCASE", (tag["name"],))
-    _follow_shelves(conn, items)
-    conn.commit()
-
-
-def label_renamed(conn: sqlite3.Connection, old: str, new: str) -> None:
-    if _has(conn, "label_tags"):
-        conn.execute("UPDATE label_tags SET label_name = ? WHERE label_name = ?", (new, old))
-    if _has(conn, "university_semesters"):
-        conn.execute("UPDATE university_semesters SET shelf_name = ? WHERE shelf_name = ? COLLATE NOCASE", (new, old))
-
-
-def discipline_shelf(conn: sqlite3.Connection) -> str:
-    """The shelf of the current University semester, lowercase, whose tags are disciplines with an edit window; "" when there is none."""
+def semester_code(conn: sqlite3.Connection) -> str:
+    """The identification code of the current University semester, lowercase; "" when there is none. Tags carrying it are the
+    semester's disciplines."""
     from . import modules
 
     if not modules.is_enabled("academic"):
@@ -293,337 +338,37 @@ def discipline_shelf(conn: sqlite3.Connection) -> str:
         semester = university_plan.current_semester(conn)
     except Exception:
         return ""
-    return (semester or {}).get("shelf_name", "").lower()
+    return ((semester or {}).get("code") or (semester or {}).get("shelf_name") or "").lower()
 
 
-def label_removed(conn: sqlite3.Connection, name: str, into: str | None = None) -> None:
-    """A deleted label takes its tags with it; a merged one hands them to the label it merged into."""
-    if not _has(conn, "label_tags"):
-        return
-    if into:
-        conn.execute("UPDATE label_tags SET label_name = ? WHERE label_name = ?", (into, name))
-        return
-    conn.execute("DELETE FROM object_tags WHERE tag_name IN (SELECT name FROM label_tags WHERE label_name = ?)", (name,))
-    conn.execute("DELETE FROM label_tags WHERE label_name = ?", (name,))
+def move_error(conn: sqlite3.Connection, name: str, space: str) -> str | None:
+    """Why a tag cannot go to another space, or None. Items carrying it must not carry tags of the old space besides."""
+    tag = get_tag(conn, name)
+    if not tag:
+        return f"There is no tag named {name}"
+    if not conn.execute("SELECT 1 FROM label_groups WHERE name = ? COLLATE NOCASE", (space,)).fetchone():
+        return f"There is no space called {space}"
+    clash = conn.execute(
+        "SELECT 1 FROM object_labels a JOIN object_labels b ON a.object_type = b.object_type AND a.object_id = b.object_id "
+        "AND b.label_name != a.label_name COLLATE NOCASE JOIN label_config c ON c.name = b.label_name "
+        "WHERE a.label_name = ? COLLATE NOCASE AND c.label_group != ? COLLATE NOCASE LIMIT 1", (name, space)).fetchone()
+    return "Some items carry this tag together with tags of its current space, so it would put them in two spaces" if clash else None
 
 
-TAG_TYPE = {"notebook": "note"}  # object_labels spells notes "notebook"
-
-
-def picker(conn: sqlite3.Connection, object_type: str, object_id: str, old_labels: list[str]) -> dict[str, Any]:
-    """The Tag dropdown's options and the item's current picks. Until the migration gives every label its tag, a label
-    with none is offered as its future default tag, and an item with no tag links yet shows its old labels as those tags.
-    Tags of archived labels are offered only when the item already carries them."""
-    kind = TAG_TYPE.get(object_type, object_type)
-    chosen = tags_for_object(conn, kind, object_id) if object_id and _has(conn, "object_tags") else []
-    selected = chosen or [n for n in old_labels if n]
-    rows = list_tags(conn) if _has(conn, "label_tags") else []
-    labels = _label_rows(conn)
-    with_tags = {r["label_name"] for r in rows}
-    names = {r["name"] for r in rows if not labels.get(r["label_name"], {}).get("archived_at")}
-    names |= {n for n, cfg in labels.items() if n not in with_tags and not cfg.get("archived_at")}
-    names |= set(selected)
-    probe = [{"uid": n, "tags": [n]} for n in names]
-    looks = {}
-    for t in rows:
-        looks[t["name"]] = t
-    cfg = {r["name"]: r for r in labels.values()}
-    items = []
-    for n in sorted(names, key=str.lower):
-        base = looks.get(n) or cfg.get(n) or {}
-        items.append({"uid": n, "name": n, "color": base.get("color") or "gray", "icon": base.get("icon") or ""})
-    return {"items": items, "selected": selected}
-
-
-def labels_of(conn: sqlite3.Connection, names: list[str], keep_unknown: bool = False) -> list[str]:
-    """The old label links for picked tags: a tag stands for its label; a label without a tag yet stands for itself. A name
-    that is neither is dropped (tags are never made on the fly), unless `keep_unknown` is set for the older bulk calls."""
-    labels = _label_rows(conn)
-    out: list[str] = []
-    for name in names:
-        tag = get_tag(conn, name) if _has(conn, "label_tags") else None
-        label = tag["label_name"] if tag else (name if (name in labels or (keep_unknown and name)) else None)
-        if label and label not in out:
-            out.append(label)
-    return out
-
-
-def record(conn: sqlite3.Connection, object_type: str, object_id: str, names: list[str]) -> None:
-    """Stores the picked tags as tag links (labels without a tag yet are carried by their old label link)."""
-    kind = TAG_TYPE.get(object_type, object_type)
-    if kind not in OBJECT_TYPES or not _has(conn, "label_tags"):
-        return
-    real = [n for n in names if get_tag(conn, n)]
-    set_object_tags(conn, kind, object_id, real)
-
-
-def filter_items(conn: sqlite3.Connection, object_type: str, items: list[dict[str, str]], *, lowercase_values: bool = False) -> list[dict[str, str]]:
-    """A label filter's options with the label entries swapped for tags: every tag carried by an item of this type, plus
-    the labels in use that carry no tag links yet (their future default tags). Group entries stay as they are."""
-    kind = TAG_TYPE.get(object_type, object_type)
-    linked = [r[0] for r in conn.execute("SELECT DISTINCT tag_name FROM object_tags WHERE object_type = ?", (kind,))] \
-        if _has(conn, "object_tags") else []
-    names = sorted({i["name"] for i in items if i.get("section") == "label"} | set(linked), key=str.lower)
-    kept = [i for i in items if i.get("section") != "label"]
-    return kept + [{"value": n.lower() if lowercase_values else n, "name": n, "section": "label"} for n in names]
-
-
-def matcher(conn: sqlite3.Connection, object_type: str, values) -> Any:
-    """A predicate over item dicts (`uid`, `tags`) for a filter selection of tag names and `group:<name>` entries. An item
-    matches a tag when it carries that tag link; an item with no tag links yet counts as carrying the default tag of each
-    of its labels, so nothing disappears from a filter before the migration."""
-    from . import db
-    from .db.labels import GROUP_KEY_PREFIX
-
-    kind = TAG_TYPE.get(object_type, object_type)
-    picked = [(v or "").strip() for v in values if (v or "").strip()]
-    group_labels = db.expand_label_filter(conn, [v for v in picked if v.lower().startswith(GROUP_KEY_PREFIX)])
-    wanted = {v.lower() for v in picked if not v.lower().startswith(GROUP_KEY_PREFIX)}
-    linked: dict[str, set[str]] = {}
-    has_links: set[str] = set()
-    if _has(conn, "object_tags"):
-        for r in conn.execute("SELECT object_id, tag_name FROM object_tags WHERE object_type = ?", (kind,)):
-            has_links.add(r["object_id"])
-            if r["tag_name"].lower() in wanted:
-                linked.setdefault(r["object_id"], set()).add(r["tag_name"].lower())
-    defaults = {n.lower() for n in wanted if _is_default(conn, n)}
-
-    def match(item: dict[str, Any]) -> bool:
-        labels = {(t or "").lower() for t in item.get("tags") or []}
-        if labels & group_labels:
-            return True
-        if item["uid"] in linked:
-            return True
-        return item["uid"] not in has_links and bool(labels & defaults)
-
-    return match
-
-
-def _is_default(conn: sqlite3.Connection, name: str) -> bool:
-    """A name that stands for a whole label: a tag named like its label, or a label name with no tag yet."""
-    tag = get_tag(conn, name) if _has(conn, "label_tags") else None
-    if tag:
-        return tag["label_name"].lower() == tag["name"].lower()
-    return True  # not a tag, so it can only be a label that has no tag yet
-
-
-def attach_items(conn: sqlite3.Connection, object_type: str, dicts: list[dict[str, Any]]) -> None:
-    """Gives each item dict `tag_items`: its tags with their own colour and icon, for every pill and colour in the app.
-    An item with tag links shows those; one without shows the default tag of each of its labels (or the label's own look
-    while the label has no tag yet). `tags` keeps the label names for grouping and filters."""
-    if not dicts:
-        return
-    kind = TAG_TYPE.get(object_type, object_type)
-    links: dict[str, list[str]] = {}
-    if _has(conn, "object_tags"):
-        ids = [d["uid"] for d in dicts]
-        for i in range(0, len(ids), 500):
-            chunk = ids[i:i + 500]
-            marks = ", ".join("?" for _ in chunk)
-            for r in conn.execute(f"SELECT object_id, tag_name FROM object_tags WHERE object_type = ? AND object_id IN ({marks})", (kind, *chunk)):
-                links.setdefault(r["object_id"], []).append(r["tag_name"])
-    defs = {r["name"].lower(): dict(r) for r in conn.execute("SELECT * FROM label_tags")} if _has(conn, "label_tags") else {}
-    cfg = {r["name"].lower(): dict(r) for r in conn.execute("SELECT name, color, icon FROM label_config")}
-
-    def look(name: str, label: str | None = None) -> dict[str, Any]:
-        tag = defs.get(name.lower())
-        if tag:
-            return {"name": tag["name"], "color": tag["color"] or "gray", "icon": tag["icon"] or "", "label": tag["label_name"]}
-        base = cfg.get(name.lower(), {})
-        return {"name": name, "color": base.get("color") or "blue", "icon": base.get("icon") or "", "label": label or name}
-
-    for d in dicts:
-        names = links.get(d["uid"])
-        items = [look(n) for n in names] if names else [look(n) for n in d.get("tags") or []]
-        d["tag_items"] = sorted(items, key=lambda t: t["name"].lower())
-
-
-def bulk_change(conn: sqlite3.Connection, object_type: str, object_id: str, labels: list[str],
-                add: list[str] = (), remove: list[str] = (), single: bool = False) -> list[str]:
-    """Adds and removes tags on one item for a bulk edit, records the tag links and returns the item's new label list (the
-    labels the tags belong to). An item with no tag links yet starts from the default tags of its labels."""
-    kind = TAG_TYPE.get(object_type, object_type)
-    current = (tags_for_object(conn, kind, object_id) if _has(conn, "object_tags") else []) or list(labels)
-    gone = {r.lower() for r in remove}
-    wanted = [t for t in current if t.lower() not in gone]
-    for name in add:
-        if name and name.lower() not in {w.lower() for w in wanted}:
-            wanted = [name] if single else wanted + [name]
-    record(conn, object_type, object_id, wanted)
-    return labels_of(conn, wanted, keep_unknown=True)
-
-
-def ensure_finance_shelf(conn: sqlite3.Connection) -> None:
-    """The Finance shelf, in the space Personal, is where the tags of transactions started; created once."""
-    ensure_schema(conn)
-    group = FINANCE_GROUP
-    if _has(conn, "label_groups"):
-        from .db.labels import ensure_group
-
-        group = ensure_group(conn, FINANCE_GROUP)
-    conn.execute("INSERT OR IGNORE INTO label_config (name, color) VALUES (?, 'green')", (FINANCE_LABEL,))
-    conn.execute("UPDATE label_config SET label_group = ? WHERE name = ? AND COALESCE(label_group, '') = ''", (group, FINANCE_LABEL))
-    if not conn.execute("SELECT 1 FROM label_tags WHERE label_name = ?", (FINANCE_LABEL,)).fetchone():
-        add_default_tag(conn, FINANCE_LABEL, "green")
+def move_tag(conn: sqlite3.Connection, name: str, space: str) -> None:
+    tag = get_tag(conn, name)
+    conn.execute("UPDATE label_config SET label_group = ? WHERE name = ? COLLATE NOCASE", (space, name))
+    conn.execute("UPDATE object_spaces SET space = ? WHERE (object_type, object_id) IN "
+                 "(SELECT object_type, object_id FROM object_labels WHERE label_name = ? COLLATE NOCASE)", (space, tag["name"]))
     conn.commit()
 
 
-def add_finance_tag(conn: sqlite3.Connection, name: str, color: str = "gray", icon: str = "") -> None:
-    """A tag from an older backup, filed under the Finance shelf unless the name already means something."""
-    ensure_finance_shelf(conn)
-    if not name_taken(conn, name):
-        conn.execute("INSERT INTO label_tags (name, label_name, color, icon, created_at) VALUES (?, ?, ?, ?, ?)",
-                     (name, FINANCE_LABEL, color or "gray", icon or "", datetime.now(timezone.utc).isoformat()))
-
-
-def tag_styles(conn: sqlite3.Connection) -> dict[str, dict[str, str]]:
-    """Colour and icon by tag name, for drawing tag pills in tables."""
-    if not _has(conn, "label_tags"):
-        return {}
-    return {r["name"]: {"color": r["color"] or "gray", "icon": r["icon"] or ""} for r in conn.execute("SELECT name, color, icon FROM label_tags")}
-
-
-def move_finance_tags(conn: sqlite3.Connection) -> int:
-    """Files the old finance tags under the Finance shelf and turns their links on transactions and scheduled transactions
-    into tag links, then drops the old finance tag tables. A finance tag whose name is already a tag or shelf elsewhere gets
-    the suffix " (finance)". Returns the number of tags moved."""
-    old = [t for t in ("finance_tags", "finance_transaction_tags", "finance_scheduled_tags") if _has(conn, t)]
-    if not old:
-        return 0
-    ensure_finance_shelf(conn)
-    now = datetime.now(timezone.utc).isoformat()
-    names: dict[str, str] = {}
-    rows = [dict(r) for r in conn.execute("SELECT name, color, icon FROM finance_tags")] if "finance_tags" in old else []
-    used = {r["tag_name"] for r in conn.execute("SELECT DISTINCT tag AS tag_name FROM finance_transaction_tags")} if "finance_transaction_tags" in old else set()
-    used |= {r["tag_name"] for r in conn.execute("SELECT DISTINCT tag AS tag_name FROM finance_scheduled_tags")} if "finance_scheduled_tags" in old else set()
-    known = {r["name"] for r in rows}
-    rows += [{"name": n, "color": "gray", "icon": ""} for n in sorted(used - known)]
-    for r in rows:
-        existing = get_tag(conn, r["name"])
-        target = r["name"]
-        if existing and existing["label_name"] == FINANCE_LABEL:
-            names[r["name"]] = existing["name"]
-            continue
-        if name_taken(conn, target, allow_label=None):
-            target = f"{r['name']} (finance)"
-        names[r["name"]] = target
-        conn.execute("INSERT OR IGNORE INTO label_tags (name, label_name, color, icon, created_at) VALUES (?, ?, ?, ?, ?)",
-                     (target, FINANCE_LABEL, r["color"] or "gray", r["icon"] or "", now))
-    if "finance_transaction_tags" in old:
-        for r in conn.execute("SELECT txn_uid, tag FROM finance_transaction_tags").fetchall():
-            conn.execute("INSERT OR IGNORE INTO object_tags VALUES ('transaction', ?, ?)", (r["txn_uid"], names.get(r["tag"], r["tag"])))
-    if "finance_scheduled_tags" in old:
-        for r in conn.execute("SELECT scheduled_uid, tag FROM finance_scheduled_tags").fetchall():
-            conn.execute("INSERT OR IGNORE INTO object_tags VALUES ('scheduled', ?, ?)", (r["scheduled_uid"], names.get(r["tag"], r["tag"])))
-    for t in old:
-        conn.execute(f"DROP TABLE {t}")
-    conn.commit()
-    return len(rows)
-
-
-PROJECTS_SHELF = "Projects"
-
-
-def fold_projects(conn: sqlite3.Connection) -> list[str]:
-    """Every remaining project becomes a tag (with its own look) on the shelf Projects, which takes the farthest of their
-    deadlines, in the space most of them sat in. Their items keep the tag; the project shelves, their auto-shelf lists and
-    the project flag go. Returns the names folded."""
-    from . import db
-
-    ensure_schema(conn)
-    rows = [dict(r) for r in conn.execute("SELECT * FROM label_config WHERE is_project = 1 ORDER BY name COLLATE NOCASE")]
-    if not rows:
-        return []
-    spaces = [r["label_group"] for r in rows if r.get("label_group")]
-    conn.execute("INSERT OR IGNORE INTO label_config (name, color, icon) VALUES (?, 'gray', 'folder')", (PROJECTS_SHELF,))
-    if spaces:
-        conn.execute("UPDATE label_config SET label_group = ? WHERE name = ? COLLATE NOCASE AND COALESCE(label_group, '') = ''",
-                     (max(set(spaces), key=spaces.count), PROJECTS_SHELF))
-    shelf = conn.execute("SELECT name FROM label_config WHERE name = ? COLLATE NOCASE", (PROJECTS_SHELF,)).fetchone()["name"]
-    add_default_tag(conn, shelf, "gray", "folder")
-    deadlines = [r.get("deadline_date") or r.get("end_date") for r in rows]
-    farthest = max((d for d in deadlines if d), default=None)
-    if farthest:
-        conn.execute("UPDATE label_config SET has_deadline = 1, deadline_date = ? WHERE name = ? AND (deadline_date IS NULL OR deadline_date < ?)",
-                     (farthest, shelf, farthest))
-    folded = []
-    for r in rows:
-        name = r["name"]
-        if name.lower() == shelf.lower():
-            conn.execute("UPDATE label_config SET is_project = 0 WHERE name = ?", (name,))
-            continue
-        add_default_tag(conn, name, r.get("color") or "gray", r.get("icon") or "")
-        linked = {(x["object_type"], x["object_id"]) for x in conn.execute("SELECT DISTINCT object_type, object_id FROM object_tags")}
-        for x in conn.execute(f"SELECT object_type, object_id FROM object_labels WHERE label_name = ? AND object_type IN ({', '.join('?' for _ in LABEL_OBJECT_TYPES)})",
-                              (name, *LABEL_OBJECT_TYPES)).fetchall():
-            kind = TAG_TYPE.get(x["object_type"], x["object_type"])
-            if (kind, x["object_id"]) not in linked:
-                conn.execute("INSERT OR IGNORE INTO object_tags VALUES (?, ?, ?)", (kind, x["object_id"], name))
-        db.merge_labels(conn, name, shelf)
-        folded.append(name)
-    conn.execute("UPDATE label_config SET auto_labels = NULL WHERE auto_labels IS NOT NULL")
-    conn.commit()
-    return folded
-
-
-def _label_rows(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
-    return {r["name"]: dict(r) for r in conn.execute("SELECT * FROM label_config")}
-
-
-def plan_migration(conn: sqlite3.Connection, fold: dict[str, str] | None = None) -> dict[str, Any]:
-    """What `apply_migration` would create, as counts and lists. Changes nothing. `fold` maps a project name to the
-    label it becomes a tag under (for example a semester label holding its classes)."""
-    labels = _label_rows(conn)
-    used = {r["label_name"] for r in conn.execute("SELECT DISTINCT label_name FROM object_labels")}
-    fold = {k: v for k, v in (fold or {}).items() if labels.get(k, {}).get("is_project")}
-    finance = [r["name"] for r in conn.execute("SELECT name FROM finance_tags")] if _has(conn, "finance_tags") else []
-    links = conn.execute("SELECT COUNT(*) FROM finance_transaction_tags").fetchone()[0] if _has(conn, "finance_tags") else 0
-    label_links = conn.execute(f"SELECT COUNT(*) FROM object_labels WHERE object_type IN ({', '.join('?' for _ in LABEL_OBJECT_TYPES)})",
-                               LABEL_OBJECT_TYPES).fetchone()[0]
-    return {"labels": sorted((set(labels) | used) - set(fold) | set(fold.values()), key=str.lower), "folded": fold,
-            "projects": [n for n, c in labels.items() if c.get("is_project")], "finance_tags": finance,
-            "finance_links": links, "label_links": label_links}
-
-
-def _has(conn: sqlite3.Connection, table: str) -> bool:
-    return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone() is not None
-
-
-def apply_migration(conn: sqlite3.Connection, fold: dict[str, str] | None = None) -> dict[str, Any]:
-    """Gives every label its default tag, files finance tags under a Finance label and turns label links into tag
-    links. A folded project becomes a tag under its target label, which takes the latest folded deadline. Old rows
-    stay in place, dormant."""
-    ensure_schema(conn)
-    plan = plan_migration(conn, fold)
-    labels = _label_rows(conn)
-    now = datetime.now(timezone.utc).isoformat()
-
-    def ensure_label(name: str, group: str, color: str = "gray") -> None:
-        conn.execute("INSERT OR IGNORE INTO label_config (name, color) VALUES (?, ?)", (name, color))
-        conn.execute("UPDATE label_config SET label_group = ? WHERE name = ? AND COALESCE(label_group, '') = ''", (group, name))
-
-    for project, target in plan["folded"].items():
-        cfg = labels[project]
-        ensure_label(target, cfg.get("label_group") or "", cfg.get("color") or "gray")
-        deadline = cfg.get("deadline_date") or cfg.get("end_date")
-        if deadline:
-            conn.execute("UPDATE label_config SET has_deadline = 1, deadline_date = ? WHERE name = ? "
-                         "AND (deadline_date IS NULL OR deadline_date < ?)", (deadline, target, deadline))
-        conn.execute("INSERT OR IGNORE INTO label_tags (name, label_name, color, icon, created_at) VALUES (?, ?, ?, ?, ?)",
-                     (project, target, cfg.get("color") or "gray", cfg.get("icon") or "", now))
-    labels = _label_rows(conn)
-    for name in set(plan["labels"]):
-        cfg = labels.get(name, {})
-        conn.execute("INSERT OR IGNORE INTO label_tags (name, label_name, color, icon, created_at) VALUES (?, ?, ?, ?, ?)",
-                     (name, name, cfg.get("color") or "gray", cfg.get("icon") or "", now))
-    move_finance_tags(conn)
-    # An item that already has tag links (picked in the Tag dropdown) keeps exactly those; only items without any get
-    # a link to the default tag of each of their labels.
-    tagged = {(r["object_type"], r["object_id"]) for r in conn.execute("SELECT DISTINCT object_type, object_id FROM object_tags")}
-    for r in conn.execute(f"SELECT object_type, object_id, label_name FROM object_labels WHERE object_type IN ({', '.join('?' for _ in LABEL_OBJECT_TYPES)})",
-                          LABEL_OBJECT_TYPES).fetchall():
-        kind = "note" if r["object_type"] == "notebook" else r["object_type"]
-        if (kind, r["object_id"]) not in tagged:
-            conn.execute("INSERT OR IGNORE INTO object_tags VALUES (?, ?, ?)", (kind, r["object_id"], r["label_name"]))
-    conn.commit()
-    return plan
+def merge_error(conn: sqlite3.Connection, name: str, dest: str) -> str | None:
+    a, b = get_tag(conn, name), get_tag(conn, dest)
+    if not a or not b:
+        return "Choose a tag to merge into"
+    if a["name"].lower() == b["name"].lower():
+        return "A tag cannot be merged into itself"
+    if a["space"].lower() != b["space"].lower() and move_error(conn, name, b["space"]):
+        return "These tags are in different spaces and some items carry both spaces' tags"
+    return None

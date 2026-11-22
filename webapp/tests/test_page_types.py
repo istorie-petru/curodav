@@ -73,14 +73,6 @@ class TestStorage:
 
 
 class TestPages:
-    def test_label_secretariat_lists_only_its_own_items(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "page_type": "secretariat"})
-        _task(conn, "mine", ["Gym"])
-        _task(conn, "other", ["Work"])
-        resp = label_pages.label_page("Gym", _request("/labels/Gym", b"view=agenda"), conn=conn)
-        body = resp.body.decode()
-        assert resp.template.name == "secretariat.html"
-        assert "Task mine" in body and "Task other" not in body
 
     def test_home_secretariat_lists_everything(self, conn):
         _task(conn, "a", ["Gym"])
@@ -129,7 +121,7 @@ class TestChoosingAPageType:
 
     def test_group_edit_saves_the_choice(self, conn):
         db.ensure_group(conn, "Uni")
-        label_pages.update_group("Uni", color="gray", icon="", new_name="", members=[], members_submitted="",
+        label_pages.update_group("Uni", color="gray", icon="", new_name="",
                                  page_type="secretariat", request=None, conn=conn)
         assert db.get_group_page_type(conn, "Uni") == "secretariat"
 

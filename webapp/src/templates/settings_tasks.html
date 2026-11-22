@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Tasks - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_section_row.html" import section_row %}
+{% from "_settings_rows.html" import select_row, default_rows, link_row %}
+{{ page_header_narrow("Tasks", "check-square") }}
+<div class="settings-stack">
+{% call section_row('') %}Views and reminders{% endcall %}
+<div class="card">{{ default_rows(default_rows_list) }}</div>
+{% call section_row('') %}Completed tasks{% endcall %}
+<div class="card">
+    {{ select_row('/settings/task-auto-archive', 'task-auto-archive-form', 'days', 'Auto-archive completed tasks', 'Deletes done and archived tasks once they are this old', days_items, auto_archive_days) }}
+    {{ link_row('/settings/data-maintenance', 'Purge completed tasks', 'Deletes the completed tasks for good, in Data') }}
+</div>
+</div>
+{% endblock %}

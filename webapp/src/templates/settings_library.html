@@ -1,28 +1,57 @@
 {% extends "base.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_section_row.html" import section_row %}
+{% from "_action_menu.html" import action_menu %}
+{% from "_settings_rows.html" import link_row, switch_row %}
 {% block title %}Library - Settings{% endblock %}
 {% block content %}
-{% from "_page_header_narrow.html" import page_header_narrow with context %}
-{% macro row(title, summary, href, icon_name) %}
-<div class="settings-field-row">
-    <span class="settings-field-label">{{ title }}<span class="settings-field-hint">{{ summary }}</span></span>
-    <span class="spacer"></span>
-    <a href="{{ href }}" data-modal class="icon-btn" title="Edit {{ title|lower }}" aria-label="Edit {{ title|lower }}">{{ icon(icon_name, 'icon-sm') }}</a>
-</div>
-{% endmacro %}
-{% call page_header_narrow("Library", "library") %}{% endcall %}
+{{ page_header_narrow("Library", "library") }}
 {% include "_flash.html" %}
 <div id="modal-target">
-<div class="settings-group">
+{% call section_row('') %}Book library{% endcall %}
 <div class="card">
-    {{ row('Book library', ('In use, ' ~ calibre_linked ~ ' in Curodav' ~ (', ' ~ calibre_new ~ ' to add' if calibre_new else '')) if calibre_ready else 'Not found yet', '/settings/library/folder', 'folder') }}
-    {{ row('Reader', reader_set.font_size ~ '% text, ' ~ ('pages' if reader_set.layout != 'scrolled' else 'scrolling') ~ ', ' ~ reader_set.theme, '/settings/library/reader', 'book-open') }}
-    {{ row('Look up in the reader', (lookups | selectattr('on') | map(attribute='name') | join(', ')) or 'None on', '/settings/library/lookups', 'globe') }}
-    {{ row('Ratings', scale_name ~ (', ' ~ criteria_count ~ (' criterion' if criteria_count == 1 else ' criteria') if advanced_rating else ''), '/settings/library/ratings', 'star') }}
-    {{ row('Find details', ('Covers on' if auto_covers else 'Covers off') ~ ', ' ~ (sources | selectattr('status', 'equalto', 'On') | list | length) ~ ' sources on', '/settings/library/find', 'search') }}
+    {{ link_row('/settings/library/folder', 'Library folder', (('In use, ' ~ calibre_linked ~ ' in Curodav') if calibre_ready else 'Not found yet'), modal=true) }}
+    {% if calibre_ready and calibre_new %}
+    <form class="settings-field-row" method="post" action="/settings/library/books/import" data-confirm-sheet="Add {{ calibre_new }} books from the Calibre library to Curodav? Their files stay where they are.">
+        <span class="settings-field-label">Add the new books<span class="settings-field-hint">{{ calibre_new }} books are in Calibre and not yet in Curodav</span></span><span class="spacer"></span>
+        <button type="submit" class="btn ghost">{{ icon('download', 'icon-sm') }} Add</button>
+    </form>
+    {% endif %}
+    {% if calibre_ready and legacy_files %}
+    <form class="settings-field-row" method="post" action="/settings/library/books/move-files" data-confirm-sheet="Move {{ legacy_files }} stored book files into the Calibre library? Each old copy is removed once the library holds it.">
+        <span class="settings-field-label">Move stored files<span class="settings-field-hint">{{ legacy_files }} book files sit outside the Calibre library</span></span><span class="spacer"></span>
+        <button type="submit" class="btn ghost">{{ icon('folder-input', 'icon-sm') }} Move</button>
+    </form>
+    {% endif %}
+    {{ link_row('/settings/calibre', 'Calibre audit', 'Check the book library against its Calibre copy') }}
+    {{ link_row('/settings/library/maintenance', 'Maintenance', 'Repair and rebuild jobs for the book library') }}
+</div>
+{% call section_row('') %}Reader{% endcall %}
+<div class="card">
+    {{ link_row('/settings/library/reader', 'Reader', reader_set.font_size ~ '% text, ' ~ ('pages' if reader_set.layout != 'scrolled' else 'scrolling') ~ ', ' ~ reader_set.theme, modal=true) }}
+</div>
+{% call section_row('') %}Look up a selected word in the reader{% endcall %}
+<div class="card">
+    {% for l in lookups %}
+    <form class="settings-field-row" method="post" action="/settings/library/lookups/toggle" id="lookup-{{ l.key }}-form">
+        <input type="hidden" name="key" value="{{ l.key }}">
+        <label class="settings-field-label settings-ellipsis" for="lookup-{{ l.key }}" title="{{ l.url }}">{{ l.name }}</label>
+        <span class="spacer"></span>
+        {% if l.custom %}{{ action_menu([{'label': 'Remove', 'icon': 'trash', 'danger': true, 'form_action': '/settings/library/lookups/remove', 'fields': {'key': l.key}, 'confirm': 'Remove ' ~ l.name ~ '?'}], 'Actions for ' ~ l.name) }}{% endif %}
+        {% from "_inputs.html" import switch_input %}
+        {{ switch_input({'name': 'on', 'value': '1', 'id': 'lookup-' ~ l.key, 'checked': l.on, 'data-change-submit': true}) }}
+    </form>
+    {% endfor %}
+    {{ link_row('/settings/library/lookups', 'New source', 'Add a website to look words up in', modal=true) }}
+</div>
+{% call section_row('') %}Ratings{% endcall %}
+<div class="card">
+    {{ link_row('/settings/library/ratings', 'Ratings', scale_name ~ (', ' ~ criteria_count ~ (' criterion' if criteria_count == 1 else ' criteria') if advanced_rating else ''), modal=true) }}
+</div>
+{% call section_row('') %}Find details{% endcall %}
+<div class="card">
+    {{ switch_row('/settings/library/find', 'find-covers-form', 'auto_covers', 'Covers from Find details', 'Fetches a cover when details are found', auto_covers) }}
+    {% for s in sources %}{{ link_row('/settings/library/sources/' ~ s.key ~ '/edit', s.name, s.status, modal=true) }}{% endfor %}
 </div>
 </div>
-</div>
-{% endblock %}
-{% block extra_scripts %}
-<script defer src="{{ static_url('library_jobs.js') }}"></script>
 {% endblock %}

@@ -446,7 +446,7 @@ def purge_all_data(conn: sqlite3.Connection) -> None:
         "notebook_glossary_excluded_terms",
         "notebook_links", "notebook_images", "notebook_image_refs", "glossary_section_refs",
         # Personal finance (Phase P) -- same "purge wipes everything".
-        "finance_accounts", "finance_transactions", "finance_scheduled", "label_tags", "object_tags",
+        "finance_accounts", "finance_transactions", "finance_scheduled", "object_spaces", "legacy_label_tags", "legacy_object_tags",
     ]
     for table in tables:
         conn.execute(f"DELETE FROM {table}")

@@ -334,7 +334,6 @@ from .notebook import (
     detach_notebook_glossary_term,
     list_document_entry_names,
     search_link_targets,
-    enforce_one_label_and_project,
     ensure_entry_kind,
     entry_kind_looks,
     list_entry_kinds,
@@ -347,7 +346,6 @@ from .notebook import (
     list_notebook_folder_documents,
     list_notebook_folders,
     list_notebook_subfolders,
-    single_label_tags,
     BUILTIN_NOTEBOOK_FIELD_UIDS,
     CITATION_TYPES,
     CITATION_STATUSES,
@@ -495,6 +493,8 @@ from .citation_library import (  # noqa: E402
     set_edition_file,
     sources_for,
     with_edition,
+    set_edition_language,
+    keyword_options,
 )
 
 from .media import (  # noqa: E402

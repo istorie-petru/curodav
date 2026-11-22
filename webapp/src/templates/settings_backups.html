@@ -1,23 +1,40 @@
 {% extends "base.html" %}
+{% from "_section_row.html" import section_row %}
+{% from "_action_menu.html" import action_menu %}
+{% from "_empty_state.html" import empty_state %}
 {% block title %}Backups - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Backups", "archive") }}
 {% include "_flash.html" %}
-<div class="card-grid wcard-grid backup-days">
-    {% for d in days %}
-    <div class="wcard">
-        <div class="wcard-label">{{ 'Today' if loop.first else d.day|short_day }}</div>
-        <div class="wcard-rows">
-            {% for b in d.backups %}
-            <a href="/settings/backups/{{ b.name }}" data-modal class="wcard-row">
-                <span class="wcard-main"><span>{{ b.time }} {{ b.label }}</span><span class="wcard-small">{{ b.size_label }}</span></span>
-            </a>
-            {% else %}
-            <span class="wcard-small">None</span>
-            {% endfor %}
-        </div>
-    </div>
-    {% endfor %}
+<div id="modal-target">
+{% call section_row('') %}Automatic backups{% endcall %}
+<div class="card">
+    <form class="settings-field-row" method="post" action="/settings/backups/now">
+        <span class="settings-field-label">Back up now
+            <span class="settings-field-hint">A copy is made at {{ daily.morning }} and {{ daily.evening }} and at every start, and kept for a week</span>
+        </span>
+        <span class="spacer"></span>
+        <button type="submit" class="btn ghost">{{ icon('archive', 'icon-sm') }} Back up</button>
+    </form>
+</div>
+{% call section_row('') %}Kept copies{% endcall %}
+<div class="card">
+    {% if backups %}
+    <table class="entity-table settings-table">
+        <thead><tr><th class="col-name">When</th><th class="col-meta col-opt-1">Made</th><th class="col-meta col-opt-2">Size</th><th class="col-actions-narrow"></th></tr></thead>
+        <tbody>
+        {% for b in backups %}
+        <tr>
+            <td class="col-name"><a href="/settings/backups/{{ b.name }}" data-modal class="label-name">{{ b.at.strftime('%Y-%m-%d') | short_day }}, {{ b.time }}</a></td>
+            <td class="col-meta col-opt-1">{{ b.label }}</td>
+            <td class="col-meta col-opt-2">{{ b.size_label }}</td>
+            <td class="col-actions-narrow">{{ action_menu([{'label': 'Compare and restore', 'icon': 'git-pull-request', 'href': '/settings/backups/' ~ b.name, 'modal': true}], 'Actions for the backup of ' ~ b.time) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}{{ empty_state('No backups kept yet', 'archive', size='compact') }}{% endif %}
+</div>
 </div>
 {% endblock %}

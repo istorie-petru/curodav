@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import text_input %}
+{% block title %}Change entries{% endblock %}
+{% block content %}
+{% call modal(kind="form", title="Change " ~ count ~ " entr" ~ ('y' if count == 1 else 'ies'), size="small", form='accounts-bulk-form') %}
+<form method="post" action="/accounts/bulk/edit" id="accounts-bulk-form" autocomplete="off" data-follow-redirect>
+    <input type="hidden" name="uuids" value="{{ uuids }}">
+    <div class="field-grid">
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'accounts-bulk-form' %}{% set ms_name = 'space' %}{% set ms_label = 'Space' %}
+            {% set ms_items = space_items %}{% set ms_selected = keep %}{% set ms_wide = true %}{% set ms_remote = '' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'accounts-bulk-form' %}{% set ms_name = 'type' %}{% set ms_label = 'Type' %}
+            {% set ms_items = type_items %}{% set ms_selected = keep %}{% set ms_wide = true %}{% set ms_remote = '' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field field-wide"><label>Add tags</label>{{ text_input({'name': 'add_tags'}) }}</div>
+        <div class="field field-wide"><label>Remove tags</label>{{ text_input({'name': 'remove_tags'}) }}</div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

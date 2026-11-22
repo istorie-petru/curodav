@@ -40,6 +40,3 @@ def test_project_dropdown_replaces_a_project_typed_as_the_label(conn):
     assert tags == []
 
 
-def test_grouping_ignores_the_project():
-    groups = contacts_router._group_contacts_by_label([{"uid": "c1", "tags": ["Trip", "Family"]}], {"Trip"})
-    assert [g["name"] for g in groups] == ["Family"]

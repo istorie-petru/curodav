@@ -138,7 +138,7 @@ def _page_common(conn, name: str) -> dict:
         many items carry the label, for the one combined "Nothing tagged X
         yet" empty state.
     """
-    return {"label_usage_count": db.label_usage_count(conn, name), "library_count": db.page_citations(conn, shelves=[name], limit=1)["total"]}
+    return {"label_usage_count": db.label_usage_count(conn, name), "library_count": 0}
 
 
 def _dashboard_page(conn, request: Request, name: str, label: dict):
@@ -208,13 +208,8 @@ def _agenda_items(conn, scope: set[str] | None, label: dict, tasks: list[dict], 
 
 
 def _tag_filter(conn, request: Request, name: str) -> tuple[str, list[dict]]:
-    """The tag picked on this label's page (`?tag=`) and the dropdown's options; none when the label has one tag."""
-    own = tag_store.tags_of_label(conn, name)
-    picked = request.query_params.get("tag", "")
-    if len(own) < 2 or picked.lower() not in {t["name"].lower() for t in own}:
-        picked = ""
-    items = [{"value": "", "name": "All tags"}] + [{"value": t["name"], "name": t["name"]} for t in own] if len(own) > 1 else []
-    return picked, items
+    """A tag is a leaf now, so its page has no tag picker."""
+    return "", []
 
 
 def _group_by_tag(by_status: list) -> list[tuple[dict, list[dict], int]]:
@@ -378,55 +373,14 @@ def _sections_context(conn, request: Request, scope: set[str] | None, scope_key:
 
 
 @router.get("/{name}")
-def label_page(name: str, request: Request, conn=Depends(get_db)):
-    if not _label_exists(conn, name):
+def label_page(name: str, conn=Depends(get_db)):
+    """A tag has no page of its own: an old shelf or tag address opens its space's page filtered by the tag."""
+    tag = tag_store.get_tag(conn, name)
+    if not tag and db.get_group(conn, name):
+        return RedirectResponse(url=f"/groups/{quote(name, safe='')}", status_code=301)
+    if not tag or not tag["space"]:
         return RedirectResponse(url="/settings/labels", status_code=303)
-    label = db.effective_label_config(conn, name)
-    view = requested_view(request)
-    if view == "agenda":
-        return secretariat_page.render(
-            conn, request, scope_key=name, title=name, icon_name=label.get("icon") or "tag", icon_color=label.get("color"),
-            banner_ctx=dashboard_router._page_banner_context(conn, name, name=name), page_url=label_url(name), label=label,
-            view="agenda",
-        )
-    if view == "board":
-        tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
-        return scope_board_page(
-            conn, request, {name}, name, {**label, "tasks_widget": 1}, tasks, label_url(name),
-            dashboard_router._page_banner_context(conn, name, name=name), None,
-        )
-    module_page = modules.PAGE_TYPES.get(label.get("page_type"))
-    if module_page and module_page.module in modules.enabled_keys():
-        return module_page.render(conn, request, name, label)
-    return _sections_page(conn, request, name, label)
-
-
-@router.get("/{name}/preview")
-def label_preview(name: str, request: Request, conn=Depends(get_db)):
-    """A label's compact preview modal. A label pill inside a card or a detail modal opens this
-        rather than leaving the page. It shows the label's status, group, a short agenda and counts,
-        with an Open page link and an Edit button.
-    """
-    if not _label_exists(conn, name):
-        raise HTTPException(404, "No such shelf")
-    label = db.effective_label_config(conn, name)
-    tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
-    back_to = request.query_params.get("from") or ""
-    if not back_to.startswith("/") or back_to.startswith("//"):
-        back_to = ""
-    ctx = {
-        "request": request,
-        "back_to": back_to,
-        "label": label,
-        "banner": _cover_banner(conn, name, name),
-        "agenda_items": _agenda_items(conn, {name}, label, tasks, 8),
-        "open_task_count": len([t for t in tasks if t["status"] != "done"]),
-        "contact_count": len([c for c in db.list_contacts(conn) if name in (c.get("tags") or [])]),
-    }
-    ctx.update(_status_context(conn, label))
-    ctx.update(_page_common(conn, name))
-    ctx["label_tag_pills"] = tag_store.tags_of_label(conn, name)
-    return templates.TemplateResponse("label_preview_modal.html", ctx)
+    return RedirectResponse(url=f"/groups/{quote(tag['space'], safe='')}?tag={quote(tag['name'], safe='')}", status_code=301)
 
 
 @router.post("/{name}/archive")
@@ -439,7 +393,7 @@ def archive_label(name: str, x_requested_with: str | None = Header(None), conn=D
     db.archive_project(conn, name)
     if x_requested_with == "fetch":
         return Response(status_code=204)
-    return RedirectResponse(url=label_url(name), status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 @router.post("/{name}/unarchive")
@@ -447,7 +401,7 @@ def unarchive_label(name: str, x_requested_with: str | None = Header(None), conn
     db.unarchive_label(conn, name)
     if x_requested_with == "fetch":
         return Response(status_code=204)
-    return RedirectResponse(url=label_url(name), status_code=303)
+    return RedirectResponse(url="/settings/labels", status_code=303)
 
 
 group_router = APIRouter(prefix="/groups", tags=["group-pages"])
@@ -475,15 +429,6 @@ def _group_form_context(conn, request: Request, group: dict | None, copy_of: dic
     from .labels import COLORS, icon_groups_for
 
     name = group["name"] if group else ""
-    members = set(db.group_member_names(conn, name)) if group else set()
-    # Every label with its current group, so the Labels dropdown can say
-    # "(in People)" for a label that's in another group already.
-    group_of = db.label_group_by_name(conn)
-    candidates = [
-        {"name": n, "member": n in members, "other_group": (group_of.get(n) or "") if n not in members else ""}
-        for n in db.list_all_known_label_names(conn)
-        if not db.effective_label_config(conn, n).get("is_archived")
-    ]
     style = db.get_group_style(conn, name) if group else {"icon": None, "color": "gray"}
     if copy_of:
         style = db.get_group_style(conn, copy_of["name"])
@@ -491,14 +436,12 @@ def _group_form_context(conn, request: Request, group: dict | None, copy_of: dic
         "request": request,
         "group": {"name": name, **style} if group else None,
         "prefill": {"name": copy_of["name"] + " copy", **style} if copy_of else None,
-        "candidates": candidates,
         "colors": COLORS,
         "icon_groups": icon_groups_for(style["icon"]),
         "group_default_icon": db.GROUP_DEFAULT_ICON,
         "banner": db.get_page_banner(conn, db.group_page_key(name)) if group else None,
         "page_types": [(k, db.PAGE_TYPE_LABELS[k]) for k in db.PAGE_TYPES],
-        "sidebar": {"show": group.get("sidebar_show", 1) != 0, "order": group.get("sidebar_order") or 0, "kind": group.get("sidebar_kind") or "shelves",
-                    "shelves": [n for n in members if db.effective_label_config(conn, n).get("sidebar_pin")]} if group else None,
+        "sidebar": {"show": group.get("sidebar_show", 1) != 0, "order": group.get("sidebar_order") or 0} if group else None,
         "page_type": db.get_group_page_type(conn, (group or copy_of)["name"]) if (group or copy_of) else "dashboard",
     }
 
@@ -571,6 +514,9 @@ def group_page(name: str, request: Request, conn=Depends(get_db)):
         # than a blank page.
         return RedirectResponse(url="/settings/groups", status_code=303)
     name = db.get_group(conn, name)["name"]
+    picked_tag = tag_store.get_tag(conn, request.query_params.get("tag", ""))
+    if picked_tag and picked_tag["space"].lower() == name.lower() and not requested_view(request):
+        return _sections_page(conn, request, picked_tag["name"], db.effective_label_config(conn, picked_tag["name"]))
     key = db.group_page_key(name)
     style = db.get_group_style(conn, name)
     banner_ctx = dashboard_router._page_banner_context(conn, key, name=name)
@@ -615,14 +561,10 @@ def update_group(
     color: str = Form("gray"),
     icon: str = Form(""),
     new_name: str = Form(""),
-    members: list[str] = Form([]),
-    members_submitted: str = Form(""),
     page_type: str = Form(""),
     sidebar_submitted: str = Form(""),
     sidebar_show: str = Form(""),
     sidebar_order: str = Form("0"),
-    sidebar_kind: str = Form("shelves"),
-    sidebar_shelves: list[str] = Form([]),
     request: Request = None,
     conn=Depends(get_db),
 ):
@@ -634,18 +576,12 @@ def update_group(
     color = color if isinstance(color, str) and color in COLORS else "gray"
     icon = icon.strip() if isinstance(icon, str) else ""
     new_name = new_name.strip() if isinstance(new_name, str) else ""
-    members = members if isinstance(members, list) else []
-    members_submitted = members_submitted if isinstance(members_submitted, str) else ""
     if new_name.startswith(db.GROUP_KEY_PREFIX):
         raise HTTPException(400, "A space name can't start with \"group:\".")
-    if members_submitted:
-        db.set_group_members(conn, name, members)
     db.set_group_style(conn, name, icon or None, color)
     if isinstance(sidebar_submitted, str) and sidebar_submitted:
         order = sidebar_order.strip() if isinstance(sidebar_order, str) else ""
-        db.set_group_sidebar(conn, name, bool(sidebar_show) and isinstance(sidebar_show, str), int(order) if order.isdigit() else 0,
-                             sidebar_shelves if isinstance(sidebar_shelves, list) else [],
-                             sidebar_kind if isinstance(sidebar_kind, str) else "shelves")
+        db.set_group_sidebar(conn, name, bool(sidebar_show) and isinstance(sidebar_show, str), int(order) if order.isdigit() else 0)
     if isinstance(page_type, str) and page_type:
         db.set_group_page_type(conn, name, page_type)
     final = db.rename_group(conn, name, new_name) if new_name else name

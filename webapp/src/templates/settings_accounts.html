@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_section_row.html" import section_row %}
+{% from "_settings_rows.html" import select_row, link_row %}
+{% block title %}Accounts - Settings{% endblock %}
+{% block content %}
+{% call page_header_narrow("Accounts", "lock") %}
+    <a href="/accounts" class="icon-btn" title="Open the vault" aria-label="Open the vault">{{ icon('chevron-right', 'icon-sm') }}</a>
+{% endcall %}
+{% include "_flash.html" %}
+<div class="settings-stack">
+{% call section_row('') %}Security{% endcall %}
+<div class="card">
+    {% if exists %}
+    {% if unlocked %}
+    <form class="settings-field-row" method="post" action="/accounts/lock">
+        <input type="hidden" name="next" value="/settings/accounts">
+        <span class="settings-field-label">Vault<span class="settings-field-hint">Unlocked in this browser</span></span><span class="spacer"></span>
+        <button type="submit" class="btn ghost">{{ icon('lock', 'icon-sm') }} Lock</button>
+    </form>
+    {% else %}
+    <div class="settings-field-row">
+        <span class="settings-field-label">Vault<span class="settings-field-hint">Locked</span></span><span class="spacer"></span>
+        <a class="btn primary" href="/accounts/unlock?next=/settings/accounts" data-modal>{{ icon('unlock', 'icon-sm') }} Unlock</a>
+    </div>
+    {% endif %}
+    {% endif %}
+    {{ select_row('/settings/accounts/idle', 'accounts-idle-form', 'minutes', 'Lock after this long unused', none, idle_items, idle|string) }}
+    {% if unlocked %}{{ link_row('/settings/accounts/master', 'Master password', 'Change the key that opens the vault', modal=true) }}
+    {% else %}<div class="settings-field-row"><span class="settings-field-label">Master password<span class="settings-field-hint">{{ 'Unlock the vault above to change it' if exists else 'Set when the vault is created' }}</span></span></div>{% endif %}
+</div>
+{% call section_row('') %}New passwords{% endcall %}
+<div class="card">
+    {{ link_row('/settings/accounts/generator', 'Rule for new passwords', rule_summary, modal=true) }}
+</div>
+{% call section_row('') %}Entry types{% endcall %}
+<div class="card">
+    {% for t in types %}{{ link_row('/settings/accounts/type/' ~ (t.key|urlencode), t.name, t.fields | map(attribute='name') | join(', '), modal=true) }}{% endfor %}
+    {{ link_row('/settings/accounts/type/new', 'New type', 'Another kind of entry with its own fields', modal=true) }}
+</div>
+</div>
+{% endblock %}
+{% block extra_scripts %}<script defer src="{{ static_url('accounts.js') }}"></script>{% endblock %}

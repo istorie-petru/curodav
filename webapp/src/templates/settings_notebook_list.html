@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_action_menu.html" import action_menu %}
+{% from "_empty_state_row.html" import empty_state_row %}
+{% set page_add = {'href': add_url, 'label': add_label} %}
+{% block title %}{{ list_title }} - Notebook settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{{ page_header_narrow(list_title, "file-text") }}
+<div id="modal-target">
+<div class="card">
+    <table class="entity-table settings-table">
+        <thead><tr>
+            <th class="col-name">{{ column_name }}</th>
+            {% if view == 'fields' %}<th class="col-meta col-opt-2">Type</th><th class="col-meta col-opt-1">Default</th>
+            {% elif view == 'subjects' %}<th class="col-meta col-opt-1">Entries</th>
+            {% else %}<th class="col-meta col-opt-1">Fields</th>{% endif %}
+            <th class="col-actions-narrow"></th>
+        </tr></thead>
+        <tbody>
+        {% if view == 'entry-types' %}
+        {% for k in entry_kinds %}
+        <tr class="entity-row">
+            <td class="col-name"><span class="cell-tag cal-{{ k.color }}">{{ icon(k.icon, 'icon-sm') }} {{ k.name }}</span></td>
+            <td class="col-meta col-opt-1" title="{{ k.fields | join(', ') }}">{{ k.fields | join(', ') if k.fields else 'No fields' }}</td>
+            <td class="col-actions-narrow">{{ action_menu([{'label': 'Edit', 'icon': 'edit', 'href': '/settings/notebook/entry-kinds/edit?name=' ~ (k.name | urlencode), 'modal': true}], 'Actions for ' ~ k.name) }}</td>
+        </tr>
+        {% else %}{{ empty_state_row(3, 'No entry types yet.') }}{% endfor %}
+        {% elif view == 'subjects' %}
+        {% for s in entry_subjects %}
+        <tr class="entity-row">
+            <td class="col-name"><span class="cell-tag cal-{{ s.color }}">{{ s.name }}</span></td>
+            <td class="col-meta col-opt-1">{{ s.used }}</td>
+            <td class="col-actions-narrow">{{ action_menu([{'label': 'Edit', 'icon': 'edit', 'href': '/settings/notebook/entry-subjects/edit?name=' ~ (s.name | urlencode), 'modal': true}], 'Actions for ' ~ s.name) }}</td>
+        </tr>
+        {% else %}{{ empty_state_row(3, 'No subjects yet.') }}{% endfor %}
+        {% else %}
+        {% for f in fields %}
+        <tr class="entity-row">
+            <td class="col-name"><span class="label-name" title="{{ f.label or f.key }}">{{ f.label or f.key }}</span></td>
+            <td class="col-meta col-opt-2">{{ f.type }}</td>
+            <td class="col-meta col-opt-1" title="{{ f.default_value or '' }}">{{ f.default_value or '—' }}</td>
+            <td class="col-actions-narrow">{{ action_menu(
+                [{'label': 'Edit', 'icon': 'edit', 'href': '/settings/notebook/' ~ f.uid ~ '/edit', 'modal': true}]
+                + ([] if f.builtin else [{'label': 'Delete', 'icon': 'trash', 'danger': true, 'form_action': '/settings/notebook/' ~ f.uid ~ '/delete',
+                     'confirm': 'Delete "' ~ (f.label or f.key) ~ '"? Notes keep any values already stored under it.'}]), 'Actions for ' ~ (f.label or f.key)) }}</td>
+        </tr>
+        {% else %}{{ empty_state_row(4, 'No fields yet.') }}{% endfor %}
+        {% endif %}
+        </tbody>
+    </table>
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import text_input %}
+{% block title %}{{ t.name or 'New type' }}{% endblock %}
+{% block content %}
+{% from "_action_menu.html" import action_menu with context %}
+{# A KeePass field (User name, Password, Address, One-time code, Notes) keeps its name and kind; any other field is named freely. #}
+{% macro standard_row(i, f) %}
+<div class="ms-block accounts-field-row accounts-standard-row" data-row data-standard="{{ f.name }}"><input type="hidden" name="field_idx" value="{{ i }}">
+    <input type="hidden" name="field_name_{{ i }}" value="{{ f.name }}"><input type="hidden" name="field_kind_{{ i }}" value="{{ standard[f.name] if f.name in standard else 'text' }}">
+    <div class="field"><label>Field</label><span class="accounts-standard-name" data-standard-name>{{ icon('key', 'icon-sm') }} {{ f.name }}</span></div>
+    <div class="field"><label>Kind</label><span class="accounts-standard-kind" data-standard-kind>KeePass field</span></div>
+    <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove the field">{{ icon('trash', 'icon-sm') }}</button>
+</div>
+{% endmacro %}
+{% macro kind_row(i, f) %}
+<div class="ms-block accounts-field-row" data-row><input type="hidden" name="field_idx" value="{{ i }}">
+    <div class="field"><label>Field</label>{{ text_input({'name': 'field_name_' ~ i, 'value': f.name}) }}</div>
+    <div class="field">
+        {% set ms_mode = 'single' %}{% set ms_form_id = 'accounts-type-form' %}{% set ms_name = 'field_kind_' ~ i %}{% set ms_label = 'Kind' %}
+        {% set ms_items = [] %}{% for k in kinds %}{% set _ = ms_items.append({'uid': k, 'name': k|capitalize}) %}{% endfor %}
+        {% set ms_selected = f.kind %}{% set ms_wide = false %}{% set ms_remote = '' %}
+        {% include '_widget_list_multiselect.html' %}
+    </div>
+    <button type="button" class="icon-btn" data-rows-remove title="Remove" aria-label="Remove the field">{{ icon('trash', 'icon-sm') }}</button>
+</div>
+{% endmacro %}
+{% set _retire = [{'action': 'delete', 'url': '/settings/accounts/type/' ~ (t.key|urlencode) ~ '/delete', 'mode': 'confirm', 'label': 'Delete the type ' ~ t.name ~ '? Its entries keep their fields and show as logins.', 'redirect': none, 'change': none}] if can_delete else none %}
+{% call modal(kind="form", title=(t.name or 'New type'), size="medium", form='accounts-type-form', creating=is_new, retire=_retire) %}
+<form method="post" action="/settings/accounts/type" id="accounts-type-form">
+    <input type="hidden" name="key" value="{{ t.key }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': t.name, 'required': true, 'autofocus': true}) }}</div>
+        <div class="field field-wide">
+            <div class="field-label-row"><label>Fields</label>
+                {% set _std = [] %}{% for name in standard %}{% set _ = _std.append({'label': name, 'icon': 'key', 'button': true, 'attrs': {'data-acc-standard': name, 'data-standard-kind-value': standard[name]}}) %}{% endfor %}
+                <span class="accounts-label-actions">{{ action_menu(_std, aria_label='Add a KeePass field') }}
+                <button type="button" class="icon-btn" data-rows-add="accounts-kind-rows" title="Add a field of your own" aria-label="Add a field of your own">{{ icon('plus', 'icon-sm') }}</button></span></div>
+            <div class="rows-host" id="accounts-kind-rows" data-rows-host data-rows-template="accounts-kind-template">{% for f in t.fields %}{% if f.name in standard %}{{ standard_row(loop.index, f) }}{% else %}{{ kind_row(loop.index, f) }}{% endif %}{% endfor %}</div>
+            <template id="accounts-kind-template">{{ kind_row('__IDX__', {'name': '', 'kind': 'text'}) }}</template>
+            <template id="accounts-standard-template">{{ standard_row('__IDX__', {'name': '__NAME__'}) }}</template>
+        </div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

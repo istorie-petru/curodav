@@ -19,6 +19,37 @@ from typing import Any
 import httpx
 
 MAX_CHARS = 1000
+
+# The languages a book's file can be marked as: code (what the voices and the reader use), name, and Calibre's three-letter code.
+LANGUAGES = (
+    ("en", "English", "eng"), ("ro", "Romanian", "ron"), ("fr", "French", "fra"), ("de", "German", "deu"), ("es", "Spanish", "spa"),
+    ("it", "Italian", "ita"), ("pt", "Portuguese", "por"), ("nl", "Dutch", "nld"), ("pl", "Polish", "pol"), ("ru", "Russian", "rus"),
+    ("uk", "Ukrainian", "ukr"), ("cs", "Czech", "ces"), ("sk", "Slovak", "slk"), ("hu", "Hungarian", "hun"), ("bg", "Bulgarian", "bul"),
+    ("el", "Greek", "ell"), ("tr", "Turkish", "tur"), ("sv", "Swedish", "swe"), ("no", "Norwegian", "nor"), ("da", "Danish", "dan"),
+    ("fi", "Finnish", "fin"), ("la", "Latin", "lat"), ("ar", "Arabic", "ara"), ("he", "Hebrew", "heb"), ("hi", "Hindi", "hin"),
+    ("ja", "Japanese", "jpn"), ("zh", "Chinese", "zho"), ("ko", "Korean", "kor"), ("sr", "Serbian", "srp"), ("hr", "Croatian", "hrv"),
+    ("sl", "Slovenian", "slv"), ("ca", "Catalan", "cat"), ("lt", "Lithuanian", "lit"), ("lv", "Latvian", "lav"), ("et", "Estonian", "est"),
+)
+_BY_CODE = {c: (n, t) for c, n, t in LANGUAGES}
+_BY_CALIBRE = {t: c for c, _, t in LANGUAGES}
+
+
+def language_code(value: str) -> str:
+    """A language as one of the codes above ("ro", "ro-RO" and "ron" all give "ro"), or "" when it is not one of them."""
+    value = (value or "").strip().lower().replace("_", "-")
+    if value in _BY_CODE:
+        return value
+    if value.split("-")[0] in _BY_CODE:
+        return value.split("-")[0]
+    return _BY_CALIBRE.get(value, "")
+
+
+def to_calibre(code: str) -> list[str]:
+    return [_BY_CODE[code][1]] if code in _BY_CODE else []
+
+
+def from_calibre(codes: list[str]) -> str:
+    return next((_BY_CALIBRE[c] for c in codes or [] if c in _BY_CALIBRE), "")
 _VOICE = re.compile(r"[a-z]{2,3}(-[a-z0-9]{2,8})?")
 
 

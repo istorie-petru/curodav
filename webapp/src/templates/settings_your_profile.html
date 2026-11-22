@@ -3,6 +3,7 @@
 {% block title %}Your Profile - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_section_row.html" import section_row %}
 {{ page_header_narrow("Your Profile", "user-check") }}
 <div id="modal-target">
 
@@ -12,6 +13,7 @@
 {% if request.query_params.get('error') %}
 <div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>
 {% endif %}
+{% call section_row('') %}Profile{% endcall %}
 
 <div class="card">
     <!-- The row is a plain .settings-field-row div, not a form: two
@@ -38,8 +40,8 @@
         {{ text_input({'name': 'display_name', 'value': (display_name), 'placeholder': '(not set)', 'data-change-submit': true}) }}
     </form>
 </div>
-<hr class="settings-divider">
 
+{% call section_row('') %}Sign-in and sync{% endcall %}
 {% set env_managed = auth_is_env or radicale_env_configured %}
 <div class="settings-group">
     <div class="card">
@@ -90,6 +92,7 @@
         {% endif %}
     </div>
 </div>
+{% call section_row('') %}Sign out{% endcall %}
 {% if has_account %}
 <div class="settings-group">
     <div class="card">

@@ -104,9 +104,9 @@ def test_the_event_side_syncs_the_same_links(conn):
 
 def test_candidates_share_a_tag_or_are_already_linked(conn):
     _seed(conn)
-    conn.execute("INSERT INTO object_tags (object_type, object_id, tag_name) VALUES ('event', 'e1', 'Uni')")
+    conn.execute("INSERT INTO object_labels (object_type, object_id, label_name) VALUES ('event', 'e1', 'Uni')")
     db.add_event_task_relation(conn, "e2", "t1")
-    conn.execute("INSERT INTO object_tags (object_type, object_id, tag_name) VALUES ('task', 't1', 'Uni')")
+    conn.execute("INSERT INTO object_labels (object_type, object_id, label_name) VALUES ('task', 't1', 'Uni')")
     task = db.get_task(conn, "t1")
     names = {c["uid"] for c in db.link_candidate_events(conn, task, "2026-01-01")}
     assert names == {"e1", "e2"}

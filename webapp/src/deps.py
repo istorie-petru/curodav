@@ -257,10 +257,9 @@ templates.env.globals["avatar"] = _avatar
 
 
 def _sidebar_groups(request: Request) -> list[dict]:
-    """The nav rail's group section. Every group gets an entry
-        that links to its page (/groups/<name>); its `children` are its members
-        with `sidebar_pin` on, revealed by the entry's chevron in the expanded
-        rail. A Jinja global rather than per-route context because base.html
+    """The nav rail's space section. Every space gets an entry
+        that links to its page (/groups/<name>); its `children` are all its tags (no pins), revealed by the entry's chevron in the
+        expanded rail. A Jinja global rather than per-route context because base.html
         renders on every page. Broad try/except with a short-lived connection
         for the same reasons as before: a bare test Request has no `.app`, and
         a DB error should degrade to an empty section, not a 500.
@@ -269,17 +268,11 @@ def _sidebar_groups(request: Request) -> list[dict]:
         with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
             groups = sorted((g for g in db.list_groups(conn) if g["sidebar_show"]),
                             key=lambda g: (g["sidebar_order"] == 0, g["sidebar_order"], g["name"].lower()))
-            for g in groups:
-                picked = [l for l in g["labels"] if l.get("sidebar_pin")]
-                if g["sidebar_kind"] == "tags":
-                    from urllib.parse import quote
+            from urllib.parse import quote
 
-                    from . import tags
-                    g["children"] = [{**t, "href": f"/labels/{quote(l['name'], safe='')}?tag={quote(t['name'], safe='')}", "path": f"/labels/{l['name']}",
-                                      "is_project": False, "abbreviation": ""}
-                                     for l in (picked or g["labels"]) for t in tags.tags_of_label(conn, l["name"])]
-                else:
-                    g["children"] = picked
+            for g in groups:
+                g["children"] = [{**t, "href": f"/groups/{quote(g['name'], safe='')}?tag={quote(t['name'], safe='')}", "path": f"/groups/{g['name']}",
+                                  "abbreviation": ""} for t in g["labels"] if not t.get("archived_at")]
             return groups
     except Exception:
         return []
@@ -288,23 +281,17 @@ def _sidebar_groups(request: Request) -> list[dict]:
 templates.env.globals["sidebar_groups"] = _sidebar_groups
 
 
-def _sidebar_pinned(request: Request) -> list[dict]:
-    """Labels with `sidebar_pin` on and no group -- a flat "Pinned" section
-    under the groups (slice c). A grouped label is reached through its
-    group's chevron instead, so it's never listed twice. Same error
-    handling as _sidebar_groups."""
+def _university_app_name(request: Request = None) -> str:
+    """What the University app is called in the sidebar; the user can rename it in the University settings."""
     try:
-        with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
-            rows = conn.execute(
-                "SELECT name FROM label_config WHERE sidebar_pin = 1 AND archived_at IS NULL "
-                "AND TRIM(COALESCE(label_group, '')) = '' ORDER BY name COLLATE NOCASE"
-            ).fetchall()
-            return [db.effective_label_config(conn, r["name"]) for r in rows]
+        return _cached_app_meta(request, "academic_app_name", "University") or "University"
     except Exception:
-        return []
+        return "University"
 
 
-templates.env.globals["sidebar_pinned"] = _sidebar_pinned
+templates.env.globals["university_app_name"] = _university_app_name
+
+
 
 
 def _cached_app_meta(request: Request, key: str, default: str) -> str:
@@ -950,8 +937,8 @@ def respond(
 
 
 def _discipline_href(request: Request, tag: dict) -> str:
-    """The page of a University discipline for a tag of the semester's shelf, else "" (the tag then links where it always did)."""
-    label, name = (tag.get("label") or ""), (tag.get("name") or "")
+    """The page of a University discipline for a tag carrying a semester's code, else "" (the tag then links where it always did)."""
+    label, name = (tag.get("code") or ""), (tag.get("name") or "")
     if not label or not name:
         return ""
     cache = getattr(request.state, "_cc_discipline_hrefs", None)
@@ -966,7 +953,7 @@ def _discipline_href(request: Request, tag: dict) -> str:
             with db.connect(request.app.state.settings.db_path, reuse_schema=True) as conn:
                 row = conn.execute("SELECT shelf_name FROM university_semesters WHERE shelf_name = ? COLLATE NOCASE", (label,)).fetchone()
                 if row:
-                    cache[label] = f"/labels/{quote(row['shelf_name'], safe='')}/disciplines/"
+                    cache[label] = f"/university/disciplines/"
         except Exception:
             pass
     if not cache[label]:
@@ -1000,3 +987,12 @@ def _view_today() -> str:
 
 
 templates.env.globals["view_today"] = _view_today
+
+
+def _module_on(key: str) -> bool:
+    from . import modules
+
+    return modules.is_enabled(key)
+
+
+templates.env.globals["module_on"] = _module_on

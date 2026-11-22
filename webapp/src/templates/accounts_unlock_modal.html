@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import password_input, upload_input %}
+{% block title %}Unlock the vault{% endblock %}
+{% block content %}
+{% call modal(kind="form", title="Unlock the vault", size="small", form='accounts-unlock-form', save_label='Unlock', save_icon='unlock') %}
+<form method="post" action="/accounts/unlock" id="accounts-unlock-form" enctype="multipart/form-data" data-follow-redirect>
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Master password</label>{{ password_input({'name': 'password', 'autocomplete': 'current-password', 'autofocus': true, 'required': true}) }}</div>
+        <div class="field field-wide"><label>Key file</label>{{ upload_input('key_file', form='accounts-unlock-form', label='Choose a key file') }}</div>
+    </div>
+</form>
+{% if wait %}<div role="status" class="modal-sentence">Too many wrong tries; wait {{ wait }} seconds.</div>{% endif %}
+{% endcall %}
+{% endblock %}

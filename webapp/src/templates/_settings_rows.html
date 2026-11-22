@@ -1,0 +1,59 @@
+{# Rows of a settings card. Every control is the same width (style.css, .settings-field-row), whatever the page.
+   select_row posts the chosen value as soon as it is picked; link_row opens a page or a list. #}
+{% macro select_row(action, form_id, name, label, hint, items, selected, extra=none) %}
+<form class="settings-field-row" method="post" action="{{ action }}" id="{{ form_id }}">
+    {% if extra %}{% for k, v in extra.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}{% endif %}
+    <span class="settings-field-label">{{ label }}{% if hint %}
+        <span class="settings-field-hint">{{ hint }}</span>{% endif %}
+    </span>
+    <span class="spacer"></span>
+    {% set ms_name = name %}
+    {% set ms_mode = 'single' %}
+    {% set ms_label = label %}
+    {% set ms_items = items %}
+    {% set ms_selected = selected %}
+    {% set ms_autosubmit = true %}
+    {% set ms_bare = true %}
+    {% set ms_form_id = form_id %}
+    {% include "_widget_list_multiselect.html" %}
+</form>
+{% endmacro %}
+
+{% macro link_row(href, label, hint, modal=false) %}
+<a class="settings-field-row" href="{{ href }}"{% if modal %} data-modal{% endif %}>
+    <span class="settings-field-label">{{ label }}{% if hint %}
+        <span class="settings-field-hint">{{ hint }}</span>{% endif %}
+    </span>
+    <span class="spacer"></span>
+    {{ icon('chevron-right', 'icon-sm') }}
+</a>
+{% endmacro %}
+
+{# The rows of one page that come from routers/defaults.py (rows_for), each saving through /settings/defaults. #}
+{% macro default_rows(rows) %}
+{% for r in rows %}{{ select_row('/settings/defaults', 'default-' ~ r.key|replace('_', '-') ~ '-form', 'value', r.label, r.hint, r['items'], r.value, {'key': r.key, 'back': r.back}) }}{% endfor %}
+{% endmacro %}
+
+{# An On/Off row that saves at once. #}
+{% macro switch_row(action, form_id, name, label, hint, checked) %}
+<form class="settings-field-row" method="post" action="{{ action }}" id="{{ form_id }}">
+    <label class="settings-field-label" for="{{ form_id }}-switch">{{ label }}{% if hint %}
+        <span class="settings-field-hint">{{ hint }}</span>{% endif %}
+    </label>
+    <span class="spacer"></span>
+    {% from "_inputs.html" import switch_input %}
+    {{ switch_input({'name': name, 'value': '1', 'id': form_id ~ '-switch', 'checked': checked, 'data-change-submit': true}) }}
+</form>
+{% endmacro %}
+
+{# A row whose actions sit in a three-dots menu (items as for _action_menu.html). #}
+{% macro menu_row(label, hint, items, aria) %}
+<div class="settings-field-row">
+    <span class="settings-field-label">{{ label }}{% if hint %}
+        <span class="settings-field-hint">{{ hint }}</span>{% endif %}
+    </span>
+    <span class="spacer"></span>
+    {% from "_action_menu.html" import action_menu %}
+    {{ action_menu(items, aria or ('Actions for ' ~ label)) }}
+</div>
+{% endmacro %}

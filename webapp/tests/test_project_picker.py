@@ -160,15 +160,6 @@ class TestFormRendering:
         assert [i["uid"] for i in picked["items"]] == ["Thesis", "Trip", "urgent"]  # Old is archived
         assert "Old" in [i["uid"] for i in tags.picker(conn, "task", "", ["Old"])["items"]]
 
-    def test_saving_picks_writes_tag_links_and_the_old_label_links(self, conn):
-        from src import tags
-
-        conn.execute("INSERT INTO label_tags (name, label_name) VALUES ('Salt', 'urgent')")
-        tasks_router.create_task(title="Cook", description="", due_at="", status="active", tags="", tags_labels=[],
-                                 item_tags=["Salt", "Trip"], item_tags_field="1", recurrence="", conn=conn)
-        task = next(t for t in db.list_tasks(conn) if t["title"] == "Cook")
-        assert sorted(task["tags"]) == ["Trip", "urgent"]
-        assert tags.tags_for_object(conn, "task", task["uid"]) == ["Salt"]
 
 
 class TestOfflineSyncOneProjectPerEvent:

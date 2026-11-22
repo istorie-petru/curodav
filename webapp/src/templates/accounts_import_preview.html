@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import switch_input %}
+{% block title %}Import{% endblock %}
+{% block content %}
+{% call modal(kind="question", title="Import accounts", size="small", form='accounts-import-apply', save_label='Import', save_icon='upload', back='/accounts/import', back_name='Import') %}
+<div role="status" class="modal-sentence">{{ p.count }} entr{{ 'y' if p.count == 1 else 'ies' }} found, {{ p.duplicates }} already in the vault{% if p.groups %}, in {{ p.groups|length }} group{{ 's' if p.groups|length != 1 }}{% endif %}.</div>
+<form method="post" action="/accounts/import/apply" id="accounts-import-apply" data-follow-redirect>
+    <div class="field-grid">
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'accounts-import-apply' %}{% set ms_name = 'space' %}{% set ms_label = 'Space' %}
+            {% set ms_items = space_items %}{% set ms_selected = '' %}{% set ms_wide = true %}{% set ms_remote = '' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field field-wide accounts-switch-field"><label>Also import the ones already here</label>{{ switch_input({'name': 'include_duplicates', 'value': '1'}) }}</div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

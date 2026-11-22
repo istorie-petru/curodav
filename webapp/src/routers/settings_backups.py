@@ -31,7 +31,14 @@ def _back(message: str, error: bool = False) -> RedirectResponse:
 def backups_page(request: Request):
     return templates.TemplateResponse(request, "settings_backups.html", {
         "active_tab": "settings_backups", "crumbs": [{"url": "/settings", "name": "Settings"}], "title": "Backups",
-        "days": auto_backups.timeline(_dir(request)), "kinds": auto_backups.KINDS})
+        "backups": auto_backups.list_backups(_dir(request)), "kinds": auto_backups.KINDS, "daily": auto_backups.DAILY})
+
+
+@router.post(PATH + "/now")
+def back_up_now(request: Request):
+    settings = request.app.state.settings
+    auto_backups.make(settings.db_path, settings.backup_dir, "manual")
+    return _back("Backed up")
 
 
 @router.get(PATH + "/{name}")

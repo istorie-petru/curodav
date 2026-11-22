@@ -164,13 +164,6 @@ class TestSpacePageNavHighlighting:
         assert 'href="/groups/Uni" class="tab-btn tab-btn-space active"' in body
         assert 'data-tab="settings" class="tab-btn active"' not in body
 
-    def test_plain_label_page_has_no_settings_or_rail_highlight(self, conn):
-        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
-        resp = label_pages.label_page("CS101", self._space_page_request("/labels/CS101", conn), conn=conn)
-        body = resp.body.decode()
-        assert 'data-tab="settings" class="tab-btn active"' not in body
-        # CS101 isn't a Space, so it has no rail link to light up either.
-        assert 'href="/labels/CS101" class="tab-btn tab-btn-space' not in body
 
     def test_labels_manage_page_still_highlights_settings(self, conn):
         self._make_space(conn, "Uni")

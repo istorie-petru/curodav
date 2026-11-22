@@ -11,6 +11,7 @@ Feature notes: curodav-notes/documentation/features/university-module.md.
 from __future__ import annotations
 
 import sqlite3
+from urllib.parse import quote
 import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
@@ -58,8 +59,6 @@ def _tag_item(conn: sqlite3.Connection, kind: str, uid: str, tag: str, on: bool 
     current = tags.tags_for_object(conn, kind, uid)
     wanted = [t for t in current if t.lower() != tag.lower()] + ([tag] if on else [])
     tags.record(conn, kind, uid, wanted)
-    if kind in ("task", "event", "contact"):
-        db.set_object_labels(conn, kind, uid, tags.labels_of(conn, wanted, keep_unknown=True))
 
 
 def _labels(conn: sqlite3.Connection, tag: str) -> list[str]:
@@ -68,14 +67,18 @@ def _labels(conn: sqlite3.Connection, tag: str) -> list[str]:
 
 @contextmanager
 def _owner():
-    """The module is the one allowed writer of its shelf and tags."""
-    with tags.managed_writes(MODULE_KEY):
-        yield
+    """Kept so the callers read the same; the module's tags are ordinary tags now."""
+    yield
 
 
 # ---------------------------------------------------------------- semester
 
 CURRENT_KEY = "academic_current"
+APP_URL = "/university"  # the University app, a top-level page of its own
+
+
+def discipline_url(name: str) -> str:
+    return f"{APP_URL}/disciplines/{quote(name, safe='')}"
 
 
 def list_semesters(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -103,41 +106,31 @@ def get_semester(conn: sqlite3.Connection, uid: str | None) -> dict[str, Any] | 
 
 
 def plan_semester(conn: sqlite3.Connection, shelf_name: str) -> dict[str, Any]:
-    """What saving would do to the shelf: adopt one that exists or create it, and which tags become disciplines."""
-    existing = db.get_label_config(conn, shelf_name) if shelf_name.strip() else None
-    return {"shelf": shelf_name.strip(), "adopts": bool(existing), "tags": [t["name"] for t in tags.tags_of_label(conn, shelf_name)] if existing else []}
-
-
-def adoptable_shelves(conn: sqlite3.Connection, current: str = "") -> list[str]:
-    """Shelves a semester can take over: not archived, not managed by a module, not already a semester. `current` stays listed."""
-    taken = {r["shelf_name"].lower() for r in conn.execute("SELECT shelf_name FROM university_semesters")}
-    names = [l["name"] for l in db.list_labels(conn)
-             if not l.get("archived_at") and not tags.managed_by(conn, l["name"]) and l["name"].lower() not in taken]
-    return sorted(([current] if current else []) + names, key=str.lower)
+    """What saving would do with the semester's code: which tags already carry it and so become its disciplines."""
+    found = tags.tags_of_code(conn, shelf_name) if shelf_name.strip() else []
+    return {"shelf": shelf_name.strip(), "adopts": bool(found), "tags": [t["name"] for t in found]}
 
 
 def semester_group(conn: sqlite3.Connection, semester: dict[str, Any]) -> str:
-    """The space the semester's shelf sits in; its page is the study page."""
-    row = conn.execute("SELECT label_group FROM label_config WHERE name = ? COLLATE NOCASE", (semester["shelf_name"],)).fetchone()
-    return ((row["label_group"] if row else "") or "").strip()
+    """The space the semester sits in: where its tags are, or the one chosen when it was saved."""
+    row = conn.execute("SELECT label_group FROM label_config WHERE code = ? COLLATE NOCASE AND code != '' LIMIT 1", (semester["shelf_name"],)).fetchone()
+    if row and (row["label_group"] or "").strip():
+        return row["label_group"].strip()
+    return (db.get_app_meta(conn, f"academic_space:{semester['uid']}") or "").strip()
 
 
 def place_shelf(conn: sqlite3.Connection, semester: dict[str, Any], space: str | None = None, *, first: bool = False) -> str:
-    """Gives the semester's shelf the semester page and, when `space` is given, puts it in that space ("" takes it out of any space).
-    The module never makes or restyles a space: it must already exist. Safe to repeat."""
-    changes: dict[str, Any] = {"name": semester["shelf_name"], "page_type": PAGE_TYPE}
-    if first:
-        changes["sidebar_pin"] = 1
+    """Puts the semester in a space ("" takes it out of any space): its tags move there too. The module never makes a space,
+    it must already exist. Safe to repeat."""
     if space is not None:
         space = space.strip()
         found = db.get_group(conn, space) if space else None
         if space and not found:
             raise PlanError(f"There is no space called {space}")
-        changes["label_group"] = found["name"] if found else ""
-    with _owner():
-        db.upsert_label_config(conn, changes)
-    conn.execute("UPDATE label_config SET page_type = ? WHERE name = ? COLLATE NOCASE", (PAGE_TYPE, semester["shelf_name"]))  # kept even when the module is off
-    conn.commit()
+        space = found["name"] if found else ""
+        db.set_app_meta(conn, f"academic_space:{semester['uid']}", space)
+        conn.execute("UPDATE label_config SET label_group = ? WHERE code = ? COLLATE NOCASE AND code != ''", (space, semester["shelf_name"]))
+        conn.commit()
     return semester_group(conn, semester)
 
 
@@ -147,12 +140,12 @@ def semester_for_group(conn: sqlite3.Connection, group: str) -> dict[str, Any] |
     if picked and semester_group(conn, picked).lower() == (group or "").strip().lower():
         return picked
     row = conn.execute(
-        "SELECT s.* FROM university_semesters s JOIN label_config l ON l.name = s.shelf_name COLLATE NOCASE "
-        "WHERE l.label_group = ? COLLATE NOCASE ORDER BY s.created_at DESC LIMIT 1", (group,)).fetchone()
+        "SELECT s.* FROM university_semesters s WHERE s.shelf_name IN (SELECT code FROM label_config WHERE label_group = ? COLLATE NOCASE) "
+        "ORDER BY s.created_at DESC LIMIT 1", (group,)).fetchone()
     return dict(row) if row else None
 
 
-def semester_for_shelf(conn: sqlite3.Connection, shelf: str) -> dict[str, Any] | None:
+def semester_for_shelf(conn: sqlite3.Connection, shelf: str) -> dict[str, Any] | None:  # `shelf` is the semester's code
     row = conn.execute("SELECT * FROM university_semesters WHERE shelf_name = ? COLLATE NOCASE", ((shelf or "").strip(),)).fetchone()
     return dict(row) if row else None
 
@@ -178,16 +171,10 @@ def save_semester(conn: sqlite3.Connection, *, uid: str | None, name: str, shelf
     switching = bool(existing and picked and picked.lower() != existing["shelf_name"].lower())
     if existing and not switching:
         shelf_name = existing["shelf_name"]
-    elif switching and tags.managed_by(conn, picked):
-        raise PlanError(f"{picked} is managed already")
     if (switching or not existing) and conn.execute("SELECT 1 FROM university_semesters WHERE shelf_name = ? COLLATE NOCASE", (shelf_name,)).fetchone():
         raise PlanError(f"{shelf_name} already holds a semester")
-    with _owner():
-        if switching:
-            db.upsert_label_config(conn, {"name": existing["shelf_name"], "managed_by": None})
-        if db.get_label_config(conn, shelf_name) is None:
-            db.upsert_label_config(conn, {"name": shelf_name, "color": "blue", "icon": "graduation-cap", "created_at": _now()})
-        db.upsert_label_config(conn, {"name": shelf_name, "managed_by": MODULE_KEY})
+    if switching:
+        conn.execute("UPDATE label_config SET code = ? WHERE code = ? COLLATE NOCASE", (shelf_name, existing["shelf_name"]))
     uid = existing["uid"] if existing else str(uuid.uuid4())
     conn.execute(
         "INSERT INTO university_semesters (uid, shelf_name, name, start_date, end_date, class_end_date, holiday_calendar, credits_target, created_at) "
@@ -282,7 +269,7 @@ def _apply_reminders(conn: sqlite3.Connection, events: list[dict[str, Any]], rem
 # ---------------------------------------------------------------- disciplines
 
 def _teacher_uids(conn: sqlite3.Connection, tag: str) -> list[str]:
-    rows = conn.execute("SELECT object_id FROM object_tags WHERE object_type = 'contact' AND tag_name = ? COLLATE NOCASE", (tag,)).fetchall()
+    rows = conn.execute("SELECT object_id FROM object_labels WHERE object_type = 'contact' AND label_name = ? COLLATE NOCASE", (tag,)).fetchall()
     return [r["object_id"] for r in rows]
 
 
@@ -294,7 +281,7 @@ def teachers(conn: sqlite3.Connection, tag: str) -> list[dict[str, str]]:
 
 def disciplines(conn: sqlite3.Connection, semester: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
-    for t in tags.tags_of_label(conn, semester["shelf_name"]):
+    for t in tags.tags_of_code(conn, semester["shelf_name"]):
         out.append({**t, "teachers": teachers(conn, t["name"]), **count_items(conn, semester["uid"], t["name"])})
     return out
 
@@ -323,13 +310,14 @@ def save_discipline(conn: sqlite3.Connection, semester: dict[str, Any], *, old: 
     name = name.strip()
     if not name:
         raise PlanError("A discipline needs a name")
-    row = {"old": old, "name": name, "color": color or "gray", "icon": icon, "delete": False}
-    shelf = semester["shelf_name"]
-    problem = tags.validate_rows(conn, shelf, [row])
-    if problem and not (not old and not tags.tags_of_label(conn, shelf) and name.lower() == shelf.lower()):
-        raise PlanError(problem)
-    with _owner():
-        tags.apply_rows(conn, shelf, [row], colors)
+    code = semester["shelf_name"]
+    taken = tags.get_tag(conn, name)
+    if taken and taken["name"].lower() != (old or "").lower():
+        raise PlanError(f"{name} is already a tag")
+    if old and old.lower() != name.lower():
+        db.rename_label(conn, old, name)
+    db.upsert_label_config(conn, {"name": name, "color": color or "gray", "icon": icon or "", "code": code,
+                                  **({} if old else {"label_group": semester_group(conn, semester) or "", "created_at": _now()})})
     if old and old.lower() != name.lower():
         for table in ("university_topics",):
             conn.execute(f"UPDATE {table} SET discipline_tag = ? WHERE semester_uid = ? AND discipline_tag = ? COLLATE NOCASE", (name, semester["uid"], old))
@@ -401,8 +389,7 @@ def remove_discipline(conn: sqlite3.Connection, semester: dict[str, Any], tag: s
         _tag_item(conn, "contact", uid, tag, False)
     conn.execute("DELETE FROM university_topics WHERE semester_uid = ? AND discipline_tag = ? COLLATE NOCASE", (semester["uid"], tag))
     conn.commit()
-    with _owner():
-        tags.apply_rows(conn, semester["shelf_name"], [{"old": tag, "name": "", "color": "", "icon": "", "delete": True}], set())
+    db.delete_label_config(conn, tag)
 
 
 # ---------------------------------------------------------------- timetable
@@ -947,8 +934,8 @@ def delete_reading(conn: sqlite3.Connection, task_uid: str) -> None:
 def lecture_notes(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> list[dict[str, str]]:
     """The notes filed under the discipline's tag, which hold its lecture notes."""
     rows = conn.execute(
-        "SELECT n.uid, n.title FROM notebook_documents n JOIN object_tags o ON o.object_id = n.uid AND o.object_type = 'note' "
-        "WHERE o.tag_name = ? COLLATE NOCASE ORDER BY n.title", (discipline,)).fetchall() if _has_notes(conn) else []
+        "SELECT n.uid, n.title FROM notebook_documents n JOIN object_labels o ON o.object_id = n.uid AND o.object_type = 'notebook' "
+        "WHERE o.label_name = ? COLLATE NOCASE ORDER BY n.title", (discipline,)).fetchall() if _has_notes(conn) else []
     return [{"uid": r["uid"], "title": r["title"]} for r in rows]
 
 
@@ -1155,7 +1142,7 @@ def rename_everywhere(conn: sqlite3.Connection, kind: str, uid: str, title: str)
 def list_homework(conn: sqlite3.Connection, semester_uid: str, discipline: str) -> list[dict[str, Any]]:
     """Tasks carrying the discipline tag that are neither an exam nor a reading."""
     rows = conn.execute(
-        "SELECT t.uid FROM tasks t JOIN object_tags o ON o.object_id = t.uid AND o.object_type = 'task' WHERE o.tag_name = ? COLLATE NOCASE "
+        "SELECT t.uid FROM tasks t JOIN object_labels o ON o.object_id = t.uid AND o.object_type = 'task' WHERE o.label_name = ? COLLATE NOCASE "
         "AND t.uid NOT IN (SELECT task_uid FROM university_milestones WHERE task_uid IS NOT NULL) AND t.uid NOT IN (SELECT task_uid FROM university_readings)", (discipline,)).fetchall()
     out = []
     for r in rows:
@@ -1175,7 +1162,7 @@ def list_other_items(conn: sqlite3.Connection, semester_uid: str, discipline: st
     out = [{"kind": "task", "uid": h["task_uid"], "title": h["title"], "when": h["due"], "status": h["status"]}
            for h in list_homework(conn, semester_uid, discipline) if h["task_uid"] not in linked and h["task_uid"] not in habits]
     rows = conn.execute(
-        "SELECT e.uid FROM events e JOIN object_tags o ON o.object_id = e.uid AND o.object_type = 'event' WHERE o.tag_name = ? COLLATE NOCASE "
+        "SELECT e.uid FROM events e JOIN object_labels o ON o.object_id = e.uid AND o.object_type = 'event' WHERE o.label_name = ? COLLATE NOCASE "
         "AND e.uid NOT IN (SELECT event_uid FROM university_milestones WHERE event_uid IS NOT NULL) "
         "AND COALESCE(e.series_uid, '') = ''", (discipline,)).fetchall()
     for r in rows:

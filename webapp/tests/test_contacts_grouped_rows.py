@@ -61,7 +61,7 @@ class TestGroupContactsByLabel:
             {"uid": "c3", "full_name": "Sam", "tags": []},
             {"uid": "c4", "full_name": "Bea", "tags": ["Family"]},
         ]
-        groups = contacts_router._group_contacts_by_label(contacts)
+        groups = contacts_router._group_contacts(contacts, "tag")
         assert [g["name"] for g in groups] == ["Family", "Work", None]
         assert [c["uid"] for c in groups[0]["contacts"]] == ["c2", "c4"]
         assert [c["uid"] for c in groups[1]["contacts"]] == ["c1"]
@@ -69,16 +69,16 @@ class TestGroupContactsByLabel:
 
     def test_no_ungrouped_bucket_when_everyone_has_a_label(self):
         contacts = [{"uid": "c1", "full_name": "A", "tags": ["Work"]}]
-        groups = contacts_router._group_contacts_by_label(contacts)
+        groups = contacts_router._group_contacts(contacts, "tag")
         assert groups == [{"name": "Work", "contacts": contacts}]
 
     def test_single_ungrouped_bucket_when_nobody_has_a_label(self):
         contacts = [{"uid": "c1", "full_name": "A", "tags": []}, {"uid": "c2", "full_name": "B", "tags": None}]
-        groups = contacts_router._group_contacts_by_label(contacts)
+        groups = contacts_router._group_contacts(contacts, "tag")
         assert groups == [{"name": None, "contacts": contacts}]
 
     def test_empty_list_is_no_groups(self):
-        assert contacts_router._group_contacts_by_label([]) == []
+        assert contacts_router._group_contacts([], "tag") == []
 
 
 class TestRenderedGrouping:
@@ -86,10 +86,10 @@ class TestRenderedGrouping:
         _make_contact(conn, "c1", full_name="Zed", tags=["Work"])
         _make_contact(conn, "c2", full_name="Amy", tags=["Family"])
         _make_contact(conn, "c3", full_name="Sam", tags=[])
-        body = contacts_router.list_contacts(_request(), group="shelf", conn=conn).body.decode()
+        body = contacts_router.list_contacts(_request(), group="tag", conn=conn).body.decode()
         family_pos = body.index(">Family<")
         work_pos = body.index(">Work<")
-        unlabeled_pos = body.index(">Unlabeled<")
+        unlabeled_pos = body.index(">No tag<")
         assert family_pos < work_pos < unlabeled_pos
         assert "1 contact<" in body  # Family/Work each have one
 
@@ -99,15 +99,15 @@ class TestRenderedGrouping:
         # it from" flat list.
         _make_contact(conn, "c1", full_name="Zed", tags=["Work"])
         _make_contact(conn, "c2", full_name="Amy", tags=["Work"])
-        body = contacts_router.list_contacts(_request(), group="shelf", conn=conn).body.decode()
+        body = contacts_router.list_contacts(_request(), group="tag", conn=conn).body.decode()
         assert 'class="section-row"' in body
         assert ">Work<" in body and "2 contacts" in body
 
     def test_no_section_heading_when_nobody_has_a_label(self, conn):
         _make_contact(conn, "c1", full_name="Zed")
-        body = contacts_router.list_contacts(_request(), group="shelf", conn=conn).body.decode()
+        body = contacts_router.list_contacts(_request(), group="tag", conn=conn).body.decode()
         assert 'class="section-row' not in body
-        assert ">Unlabeled<" not in body
+        assert ">No tag<" not in body
 
     def test_default_list_is_a_to_z_and_a_contact_with_two_shelves_appears_once(self, conn):
         _make_contact(conn, "c1", full_name="Zed", tags=["Work", "Family"])

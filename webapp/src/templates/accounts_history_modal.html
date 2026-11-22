@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_empty_state.html" import empty_state %}
+{% block title %}Earlier versions{% endblock %}
+{% block content %}
+{% call modal(kind="manage", title="Earlier versions of " ~ e.title, size="medium", back='/accounts/entry/' ~ (e.uuid|urlencode), back_name=e.title) %}
+{% if versions %}
+<div class="contact-list">
+{% for v in versions %}
+<div class="contact-row-wrap">
+    <div class="contact-row"><span class="contact-row-main"><span class="contact-row-name">{{ v.title }}</span><span class="contact-row-sub">{{ v.username }}</span></span>
+        <span class="notebook-row-edited">{{ v.modified.isoformat() | relative_date if v.modified else '' }}</span></div>
+    <form method="post" action="/accounts/entry/{{ e.uuid|urlencode }}/history/{{ v.index }}/restore" class="form-inline">
+        <button type="submit" class="icon-btn" title="Bring back this version" aria-label="Bring back this version" data-confirm-sheet="Bring back this version? The current one is kept as an earlier version.">{{ icon('rotate-ccw', 'icon-sm') }}</button></form>
+</div>
+{% endfor %}
+</div>
+{% else %}{{ empty_state('No earlier versions', size='compact') }}{% endif %}
+{% endcall %}
+{% endblock %}

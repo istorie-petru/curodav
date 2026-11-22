@@ -73,7 +73,7 @@ def layout_day(blocks: list[dict], start_min: int, total_min: int) -> None:
 def schedule(conn, semester: dict, group: str, editing: bool = False) -> dict:
     """The weekly timetable: Monday to Friday, plus the weekend when a class falls on it. With `editing`, a block opens its slot and each
     empty hour adds a class at that hour, for the Settings page."""
-    looks = {t["name"]: t for t in tags.tags_of_label(conn, semester["shelf_name"])}
+    looks = {t["name"]: t for t in tags.tags_of_code(conn, semester["shelf_name"])}
     abbr = up.abbreviations(conn, semester["uid"])
     slots = up.list_slots(conn, semester["uid"])
     used = {s["weekday"] for s in slots}
@@ -87,7 +87,7 @@ def schedule(conn, semester: dict, group: str, editing: bool = False) -> dict:
         for s in (x for x in slots if x["weekday"] == wd):
             look = looks.get(s["discipline"], {"color": "gray", "icon": ""})
             url = (f"/settings/academic/slot/{s['series_uid']}/edit" if editing
-                   else f"/labels/{quote(group, safe='')}/disciplines/{quote(s['discipline'], safe='')}")
+                   else up.discipline_url(s["discipline"]))
             blocks.append({"discipline": s["discipline"], "short": abbr.get(s["discipline"], s["discipline"]), "color": look.get("color") or "gray", "weeks": s["weeks"],
                            "start": s["start"], "end": s["end"], "room": s["room"], "kind_label": up.SLOT_KINDS.get(s["kind"], "Class"),
                            "from": _minutes(s["start"]), "to": max(_minutes(s["end"] or s["start"]), _minutes(s["start"]) + 30), "url": url, "modal": editing})
@@ -229,7 +229,7 @@ def overview(conn, semester: dict, group: str, today: date, now: datetime) -> di
             "exams_this_fortnight": len([r for r in coming if r["days_left"] <= 14]), "due": due[:6], "over": over,
             "absences": standing_rows, "missed": missed, "disciplines": list(looks.values()), "schedule": schedule(conn, semester, group),
             "unscheduled": [{"name": d["name"], "color": d.get("color") or "gray", "icon": d.get("icon") or "book-open", "short": up.short_name(conn, semester["uid"], d["name"]),
-                             "url": f"/labels/{quote(group, safe='')}/disciplines/{quote(d['name'], safe='')}"} for d in looks.values() if not d.get("slots")]}
+                             "url": up.discipline_url(d["name"])} for d in looks.values() if not d.get("slots")]}
 
 
 def _page_add(semester: dict | None, view: str, disciplines: list[dict]) -> dict:
@@ -244,13 +244,16 @@ def _page_add(semester: dict | None, view: str, disciplines: list[dict]) -> dict
     return {"label": "Add", "items": items}
 
 
-def render(conn, request: Request, name: str, label: dict):
-    semester = up.semester_for_shelf(conn, name)
+def render(conn, request: Request, semester: dict | None = None):
+    """The University app's page: the current semester's overview, exams or timetable."""
+    semester = semester or up.current_semester(conn)
+    name = semester["shelf_name"] if semester else ""
     today = clock.today()
-    base = f"/labels/{quote(name, safe='')}"
+    base = up.APP_URL
+    label = {"name": name, "icon": "graduation-cap", "color": "blue"}
     asked = request.query_params.get("view") or "overview"
     view = asked if asked in dict(VIEWS) else "overview"
-    ctx = {"request": request, "label": label, "name": name, "enc": quote(name, safe=""), "semester": semester, "view": view,
+    ctx = {"request": request, "active_tab": "university", "label": label, "name": name, "enc": quote(name, safe=""), "semester": semester, "view": view,
            "views": [{"key": k, "label": text, "url": base if k == "overview" else f"{base}?view={k}", "active": k == view} for k, text in VIEWS]}
     if semester:
         if view == "exams":

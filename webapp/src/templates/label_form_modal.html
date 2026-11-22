@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
-{% block title %}{{ 'Edit shelf' if l else 'New shelf' }}{% endblock %}
+{% block title %}{{ 'Edit tag' if l else 'New tag' }}{% endblock %}
 {% block content %}
-{% set _noun = 'shelf' %}
+{% set _noun = 'tag' %}
 <!-- Everything fits in one modal: Name, Group, Role (Plain / Project),
      Deadline, Page (Dashboard or Sections), Pins; colour + icon are the
      Look dropdown with the banner button at the end of its row. See routers/labels.py's edit_label_modal /

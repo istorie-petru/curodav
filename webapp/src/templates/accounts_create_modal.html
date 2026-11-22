@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import password_input, upload_input %}
+{% block title %}Create the vault{% endblock %}
+{% block content %}
+{% set _extra %}<a class="btn ghost" href="/accounts/key-file" download>{{ icon('download', 'icon-sm') }} Key file</a>{% endset %}
+{% call modal(kind="form", title="Create the vault", size="small", form='accounts-create-form', creating=true, save_icon='lock', extra_html=_extra) %}
+<form method="post" action="/accounts/create" id="accounts-create-form" enctype="multipart/form-data" data-follow-redirect>
+    <div class="field-grid">
+        <div class="field field-wide"><label>Master password</label>{{ password_input({'name': 'password', 'autocomplete': 'new-password', 'autofocus': true, 'required': true, 'minlength': min_length}) }}</div>
+        <div class="field field-wide"><label>Repeat it</label>{{ password_input({'name': 'confirm', 'autocomplete': 'new-password', 'required': true}) }}</div>
+        <div class="field field-wide"><label>Key file</label>{{ upload_input('key_file', form='accounts-create-form', label='Choose a key file') }}</div>
+    </div>
+</form>
+<div class="modal-sentence">There is no way to recover the vault without its master password and key file.</div>
+{% endcall %}
+{% endblock %}

@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from src import db, event_series, study_format, university
+from src import db, event_series, study_format, study_page, university
 from src.university_discipline import discipline_page
 from src import university_evaluation as ue
 from src import university_plan as up
@@ -45,14 +45,14 @@ def test_the_page_offers_to_set_up_a_semester_first(conn):
 
 def test_the_page_lists_the_semester_and_its_disciplines(conn, sem):
     html = _html(university.university_settings(_request(), conn=conn))
-    assert "Autumn 2026" in html and "Biology" in html and "Dr Ionescu" in html and "/labels/Autumn%202026/disciplines/Biology" in html and "Classes end" in html
+    assert "Autumn 2026" in html and "Biology" in html and "Dr Ionescu" in html and "/university/disciplines/Biology" in html and "Classes end" in html
 
 
 def test_the_forms_and_the_discipline_view_render(conn, sem):
     series = up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "room": "A2", "kind": "lecture", "weeks": "all"})
     add_exam(conn, sem, title="Final", day="2027-01-20", start="09:00", end="11:00", weight="60")
     up.save_reading(conn, sem, "Biology", task_uid=None, title="Cell Biology", author="Alberts")
-    page = _html(discipline_page("Autumn 2026", "Biology", _request("/labels/Autumn%202026/disciplines/Biology"), conn=conn))
+    page = _html(discipline_page("Biology", _request("/university/disciplines/Biology"), conn=conn))
     for expected in ("Monday", "Final", "Cell Biology", "Timetable", "Attendance", "Other notes"):
         assert expected in page, expected
     reading = up.list_readings(conn, sem["uid"])[0]
@@ -117,7 +117,7 @@ def test_importing_needs_the_semester_dates(conn):
 
 
 def test_the_study_page_without_a_semester_points_to_the_settings(conn):
-    html = _html(university._render_study(conn, _request("/groups/Uni"), "Uni", {"name": "Uni", "icon": "", "color": "blue"}))
+    html = _html(study_page.render(conn, _request("/university")))
     assert "No semester set up" in html
 
 
@@ -152,21 +152,12 @@ def test_classes_and_exams_can_be_edited_elsewhere_and_a_new_title_applies_every
     assert db.get_event(conn, "free")["title"] == "Dentist again"
 
 
-def test_the_shelf_shows_the_study_page_and_its_space_stays_an_ordinary_page(conn, sem):
-    from src.routers import label_pages
-    db.ensure_group(conn, "University")
-    up.save_semester(conn, uid=sem["uid"], name="Autumn 2026", shelf_name="", start_date="2026-10-05", end_date="2027-02-14", class_end_date="2026-12-18", space="University")
-    html = _html(label_pages.label_page("Autumn 2026", _request("/labels/Autumn 2026"), conn=conn))
-    assert "Autumn 2026" in html
-    assert db.get_group(conn, "University")["page_type"] == "dashboard"
-    assert "wcard" not in _html(label_pages.group_page("University", _request("/groups/University"), conn=conn))
-    assert "wcard" in html and "view=exams" in html and "view=disciplines" not in html and "view=attendance" not in html and "view=work" not in html and "view=agenda" not in html and "view=board" not in html
 
 
-def test_a_missing_discipline_or_group_is_not_found(conn, sem):
-    for group, name in (("Autumn 2026", "Nope"), ("Nope", "Biology")):
+def test_a_missing_discipline_is_not_found(conn, sem):
+    for name in ("Nope",):
         with pytest.raises(HTTPException) as exc:
-            discipline_page(group, name, _request(), conn=conn)
+            discipline_page(name, _request(), conn=conn)
         assert exc.value.status_code == 404
 
 
@@ -191,14 +182,6 @@ def test_the_semester_saves_directly_and_a_shorter_class_end_says_what_went(conn
     assert db.get_label_config(conn, "Autumn 2026") is None or True
 
 
-def test_a_new_semester_gets_its_own_shelf_in_the_chosen_space_and_the_menu_switches(conn, sem):
-    db.ensure_group(conn, "University")
-    university.semester_save("Spring 2027", "2027-02-22", "2027-07-01", "2027-06-04", "", "", credits_target="", shelf="", space="University", conn=conn)
-    assert db.get_label_config(conn, "Spring 2027")["label_group"] == "University" and up.current_semester(conn)["name"] == "Spring 2027"
-    resp = university.semester_select(sem["uid"], conn=conn)
-    assert resp.headers["location"] == "/labels/Autumn%202026" and up.current_semester(conn)["uid"] == sem["uid"]
-    assert up.semester_for_shelf(conn, "autumn 2026")["uid"] == sem["uid"]
-    assert "Spring 2027" in _html(university.semester_form(_request(), new="1", conn=conn)) or True
 
 
 def test_topic_rows_keep_a_renamed_topic_and_its_classes_and_continue_the_numbering(conn, sem):
@@ -230,7 +213,7 @@ def test_a_reading_points_at_a_library_book_with_a_page_and_a_category(conn, sem
     t = up.save_reading(conn, sem, "Biology", task_uid=None, citation_id=uid, locator="ch. 3", category="obligatory", notes="Read twice")
     r = up.list_readings(conn, sem["uid"], "Biology")[0]
     assert (r["title"], r["author"], r["locator"], r["category"], r["notes"]) == ("Cell Biology", "Alberts, B.", "ch. 3", "obligatory", "Read twice")
-    assert db.get_task(conn, t) is None and "Obligatory" in _html(discipline_page("Autumn 2026", "Biology", _request(), conn=conn))
+    assert db.get_task(conn, t) is None and "Obligatory" in _html(discipline_page("Biology", _request(), conn=conn))
     with pytest.raises(up.PlanError, match="not in the library"):
         up.save_reading(conn, sem, "Biology", task_uid=None, citation_id="nope")
     assert "Cell Biology" in _html(university.reading_new(_request(), "Biology", conn=conn))
@@ -386,7 +369,7 @@ def test_the_university_pages_no_longer_carry_import_or_export_buttons(conn, sem
     def main_of(html):
         return html.split("<main")[1].split("</main>")[0].lower()
 
-    for page in (_html(university.university_settings(_request(), conn=conn)), _html(discipline_page("Autumn 2026", "Biology", _request(), conn=conn))):
+    for page in (_html(university.university_settings(_request(), conn=conn)), _html(discipline_page("Biology", _request(), conn=conn))):
         assert "import" not in main_of(page) and "export" not in main_of(page)
 
 
@@ -399,9 +382,9 @@ def test_the_discipline_window_has_no_evaluation_menu_and_a_full_width_look_with
 
 
 def test_a_banner_given_to_a_discipline_shows_on_its_page(conn, sem):
-    assert "detail-banner" not in _html(discipline_page("Autumn 2026", "Biology", _request(), conn=conn))
+    assert "detail-banner" not in _html(discipline_page("Biology", _request(), conn=conn))
     db.set_page_banner(conn, university.banner_scope("Biology"), {"kind": "remote", "image_url": "https://example.com/bio.jpg", "alt": "Biology banner"})
-    page = _html(discipline_page("Autumn 2026", "Biology", _request(), conn=conn))
+    page = _html(discipline_page("Biology", _request(), conn=conn))
     assert "https://example.com/bio.jpg" in page or "/banners/image?scope=discipline" in page
     assert "Change banner" in _html(university.discipline_edit("Biology", _request(), conn=conn))
 
@@ -410,7 +393,7 @@ LABEL = {"name": "Autumn 2026", "icon": "graduation-cap", "color": "blue"}
 
 
 def _study(conn, query=b""):
-    return _html(university._render_study(conn, _request("/labels/Autumn%202026", query), "Autumn 2026", LABEL))
+    return _html(study_page.render(conn, _request("/university", query)))
 
 
 def test_the_schedule_is_the_timetable_with_odd_weeks_left_even_weeks_right_and_no_week_navigation(conn, sem):
@@ -495,23 +478,6 @@ def test_other_items_are_the_tasks_and_events_made_by_hand_and_an_event_can_be_d
 
 
 
-def test_the_sidebar_lists_the_semester_shelf_under_its_space(conn, sem):
-    from src import deps
-
-    db.ensure_group(conn, "University")
-    up.save_semester(conn, uid=sem["uid"], name="Autumn 2026", shelf_name="", start_date="2026-10-05", end_date="2027-02-14", class_end_date="2026-12-18", space="University")
-
-    class App:
-        class state:
-            class settings:
-                from pathlib import Path
-                db_path = Path(conn.execute("PRAGMA database_list").fetchone()[2])
-
-    request = _request("/labels/Autumn%202026/disciplines/Biology")
-    request.scope["app"] = App
-    group = next(g for g in deps._sidebar_groups(request) if g["name"] == "University")
-    assert [c["name"] for c in group["children"]] == ["Autumn 2026"]
-    assert "Biology" in _html(discipline_page("Autumn 2026", "Biology", request, conn=conn))
 
 
 def test_other_items_leave_out_what_is_tracked_elsewhere(conn, sem):
@@ -581,4 +547,4 @@ def test_a_discipline_page_renders_when_the_timetable_slots_have_teachers(conn, 
     db.upsert_contact(conn, {"uid": "t1", "full_name": "Dr Timetable", "created_at": "2026-10-01", "updated_at": "2026-10-01"})
     up.save_slot(conn, sem, "Biology", {"weekday": 0, "start": "10:00", "end": "12:00", "room": "A2", "kind": "lecture", "weeks": "all", "teachers": ["t1"]})
     up.sync_teachers(conn, sem["uid"], "Biology")
-    assert "Dr Timetable" in _html(discipline_page("Autumn 2026", "Biology", _request(), conn=conn))
+    assert "Dr Timetable" in _html(discipline_page("Biology", _request(), conn=conn))

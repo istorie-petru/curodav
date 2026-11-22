@@ -62,84 +62,61 @@ def _label(conn, name, **extra):
     db.upsert_label_config(conn, row)
 
 
-def _page(conn, name="Solo"):
-    if not db.get_label_config(conn, name):
-        _label(conn, name)
-    return label_pages.label_page(name, _request(f"/labels/{name}", conn), conn=conn).body.decode()
+def _tag(conn, name, space, **extra):
+    db.ensure_group(conn, space)
+    _label(conn, name, label_group=space, **extra)
 
 
-class TestGroupsTree:
-    def test_group_without_pinned_members_has_no_chevron(self, conn):
-        _label(conn, "CS101", label_group="Uni")
+def _page(conn, path="/tasks"):
+    return label_pages.group_page("Uni", _request("/groups/Uni", conn), conn=conn).body.decode() if path == "/groups/Uni" else \
+        labels_router.manage_labels(_request("/settings/labels", conn), conn=conn).body.decode()
+
+
+class TestSpacesTree:
+    def test_a_space_without_tags_has_no_chevron(self, conn):
+        db.ensure_group(conn, "Uni")
+        conn.commit()
         body = _page(conn)
         assert '<div class="sidebar-section-label" aria-hidden="true">Spaces</div>' in body
         assert 'href="/groups/Uni" class="tab-btn tab-btn-space' in body
-        assert 'data-space-name="Uni"' in body
         assert "sidebar-tree-toggle" not in body
-        assert "sidebar-tree-children" not in body
 
-    def test_pinned_members_nest_under_the_group(self, conn):
-        _label(conn, "CS101", label_group="Uni", sidebar_pin=1)
-        _label(conn, "Art", label_group="Uni")
+    def test_every_tag_of_a_space_is_listed_under_it(self, conn):
+        _tag(conn, "CS101", "Uni")
+        _tag(conn, "Art", "Uni")
         body = _page(conn)
         assert "sidebar-tree-item has-children" in body
-        assert 'aria-label="Toggle Uni shelves"' in body
-        assert 'href="/labels/CS101" class="tab-btn tab-btn-child' in body
-        assert 'href="/labels/Art" class="tab-btn' not in body  # not pinned
+        assert 'aria-label="Toggle Uni tags"' in body
+        assert 'href="/groups/Uni?tag=CS101" class="tab-btn tab-btn-child' in body
+        assert 'href="/groups/Uni?tag=Art" class="tab-btn tab-btn-child' in body
 
-    def test_child_page_marks_child_active_and_opens_its_group(self, conn):
-        _label(conn, "CS101", label_group="Uni", sidebar_pin=1)
-        body = _page(conn, "CS101")
-        assert 'href="/labels/CS101" class="tab-btn tab-btn-child active"' in body
-        assert 'aria-expanded="true" aria-label="Toggle Uni shelves"' in body
+    def test_an_archived_tag_is_left_out(self, conn):
+        _tag(conn, "Old", "Uni")
+        db.archive_project(conn, "Old")
+        assert "tag=Old" not in _page(conn)
 
-    def test_other_page_leaves_the_group_closed(self, conn):
-        _label(conn, "CS101", label_group="Uni", sidebar_pin=1)
-        body = _page(conn)
-        assert 'aria-expanded="false" aria-label="Toggle Uni shelves"' in body
-
-    def test_group_page_marks_its_own_entry_active(self, conn):
-        _label(conn, "CS101", label_group="Uni")
-        body = label_pages.group_page("Uni", _request("/groups/Uni", conn), conn=conn).body.decode()
+    def test_the_space_page_marks_its_own_entry_active(self, conn):
+        _tag(conn, "CS101", "Uni")
+        body = _page(conn, "/groups/Uni")
         assert 'href="/groups/Uni" class="tab-btn tab-btn-space active"' in body
 
-    def test_no_groups_no_section(self, conn):
-        body = _page(conn)
-        assert ">Spaces</div>" not in body
+    def test_no_spaces_no_section(self, conn):
+        assert ">Spaces</div>" not in _page(conn)
 
-
-class TestPinnedSection:
-    def test_pinned_ungrouped_label_is_listed_flat(self, conn):
-        _label(conn, "Website", is_project=1, sidebar_pin=1)
-        body = _page(conn)
-        assert '<div class="sidebar-section-label" aria-hidden="true">Pinned</div>' in body
-        assert 'href="/labels/Website" class="tab-btn tab-btn-project' in body
-
-    def test_pinned_grouped_label_is_not_listed_twice(self, conn):
-        _label(conn, "Thesis", label_group="Uni", sidebar_pin=1)
-        body = _page(conn)
-        assert "tab-btn-project" not in body
-        assert ">Pinned</div>" not in body
-
-    def test_archived_or_unpinned_labels_are_left_out(self, conn):
-        _label(conn, "Old", sidebar_pin=1)
-        db.archive_project(conn, "Old")
-        _label(conn, "Quiet")
-        body = _page(conn)
-        assert "tab-btn-project" not in body
+    def test_there_is_no_pinned_section(self, conn):
+        _tag(conn, "CS101", "Uni", sidebar_pin=1)
+        assert ">Pinned</div>" not in _page(conn)
 
 
 class TestExpandToggle:
-    def test_expand_toggle_present_with_groups(self, conn):
-        _label(conn, "CS101", label_group="Uni")
+    def test_expand_toggle_present_with_spaces(self, conn):
+        _tag(conn, "CS101", "Uni")
         assert 'id="sidebar-expand-toggle"' in _page(conn)
 
     def test_expand_toggle_present_with_nothing(self, conn):
         assert 'id="sidebar-expand-toggle"' in _page(conn)
 
     def test_expand_toggle_uses_the_dedicated_sidebar_icon_not_a_chevron(self, conn):
-        # A chevron already means "expand this one tree item" on the same
-        # rail, so the whole-sidebar toggle uses `icon-sidebar`.
         body = _page(conn)
         toggle_start = body.index('id="sidebar-expand-toggle"')
         toggle_markup = body[toggle_start : toggle_start + 200]
@@ -147,16 +124,7 @@ class TestExpandToggle:
         assert "#icon-chevron-right" not in toggle_markup
 
 
-
-
 class TestSidebarQuickAdd:
-    def test_default_page_points_quick_add_at_task_event_modal(self, conn):
-        db.upsert_label_config(conn, {"name": "Solo", "created_at": _now()})
-        resp = label_pages.label_page("Solo", _request("/labels/Solo", conn), conn=conn)
-        body = resp.body.decode()
-        # 2026-09-25 (UI audit L1): a label's page opens the Task tab with
-        # the label prefilled (it used to open New label).
-        assert 'class="header-add" href="/quick/add?default_tab=task&amp;label=Solo"' in body
 
     def test_contacts_page_points_quick_add_at_contact_tab(self, conn):
         # 2026-09-14 (direct request, "the quick add should support both
@@ -175,19 +143,15 @@ class TestSidebarQuickAdd:
         assert 'class="header-add" href="/quick/add?default_tab=label"' in body
 
 
-def test_a_space_can_list_tags_instead_of_shelves_and_hide_or_reorder(conn):
-    from src import deps, tags
+def test_spaces_can_be_hidden_and_reordered(conn):
+    from src import deps
 
-    for name in ("Work", "Home"):
-        _label(conn, name)
-        db.set_group_members(conn, name + " space", [name])
-    tags.add_default_tag(conn, "Work")
-    db.set_group_sidebar(conn, "Work space", True, 2, ["Work"], "tags")
-    db.set_group_sidebar(conn, "Home space", True, 1, [], "shelves")
+    for name, space in (("Work", "Work space"), ("Home", "Home space")):
+        _tag(conn, name, space)
+    db.set_group_sidebar(conn, "Work space", True, 2)
+    db.set_group_sidebar(conn, "Home space", True, 1)
     groups = deps._sidebar_groups(_request("/", conn))
     assert [g["name"] for g in groups] == ["Home space", "Work space"]
-    work = groups[1]
-    assert work["sidebar_kind"] == "tags"
-    assert [c["href"] for c in work["children"]] == ["/labels/Work?tag=Work"]
-    db.set_group_sidebar(conn, "Home space", False, 1, [], "shelves")
+    assert [c["href"] for c in groups[1]["children"]] == ["/groups/Work%20space?tag=Work"]
+    db.set_group_sidebar(conn, "Home space", False, 1)
     assert [g["name"] for g in deps._sidebar_groups(_request("/", conn))] == ["Work space"]

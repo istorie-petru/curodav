@@ -17,8 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .migrations_citations import citation_editions
-from .migrations_media import annotation_colors, bookmarks, reading_time, book_annotations, cite_an_edition, reader_state, citation_series, editions_in_calibre, media_tracking, progress_log
-from . import migrations_university
+from .migrations_media import annotation_colors, bookmarks, citation_space, edition_language, reading_time, book_annotations, cite_an_edition, reader_state, citation_series, editions_in_calibre, media_tracking, progress_log
+from . import migrations_university, migrations_spaces
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,19 @@ class Migration:
 
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+_existing_install = False  # set by `run`: the database had migrations applied before this run, so it is not new
+
+
+def _modules_stay_on(conn: sqlite3.Connection) -> None:
+    """Notebook, Library and Finance became modules that a new installation starts without. An installation that already
+    existed keeps them on."""
+    if not _existing_install:
+        return
+    row = conn.execute("SELECT value FROM app_meta WHERE key = 'modules_enabled'").fetchone()
+    keys = {k for k in ((row[0] if row else "") or "").split(",") if k} | {"notebook", "library", "finance"}
+    conn.execute("INSERT INTO app_meta (key, value) VALUES ('modules_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (",".join(sorted(keys)),))
 
 
 def _note_templates(conn: sqlite3.Connection) -> None:
@@ -85,14 +98,7 @@ def _repeating_events_become_rows(conn: sqlite3.Connection) -> None:
 
 
 def _notes_have_one_label_and_project(conn: sqlite3.Connection) -> None:
-    """Notes keep their first project and first label; the dropped ones are kept as a report for the Notebook home."""
-    import json
-
-    from . import db
-
-    report = db.enforce_one_label_and_project(conn)
-    if report:
-        db.set_app_meta(conn, "notebook_label_report", json.dumps(report))
+    """Was: notes kept their first project and first label. The rule went with shelves, so nothing is trimmed."""
 
 
 def _glossary_terms_become_entries(conn: sqlite3.Connection) -> None:
@@ -189,7 +195,7 @@ def _timing_statistics(conn: sqlite3.Connection) -> None:
 
 
 def _tag_tables(conn: sqlite3.Connection) -> None:
-    from . import tags
+    from . import tags_legacy as tags
 
     tags.ensure_schema(conn)
 
@@ -219,7 +225,7 @@ def _finance_tags_become_tags(conn: sqlite3.Connection) -> None:
     """Finance tags and their links move under the shelf Finance as ordinary tags (the old finance tag tables are dropped),
     and two unused leftovers of earlier versions go: the old `tags` table (not the new `label_tags`) and the `projects`
     table, whose rows became shelves long ago."""
-    from . import tags
+    from . import tags_legacy as tags
 
     tags.ensure_schema(conn)
     tags.move_finance_tags(conn)
@@ -229,7 +235,7 @@ def _finance_tags_become_tags(conn: sqlite3.Connection) -> None:
 
 def _projects_become_tags(conn: sqlite3.Connection) -> None:
     """Remaining projects become tags on the shelf Projects (see tags.fold_projects); auto-shelf lists go."""
-    from . import tags
+    from . import tags_legacy as tags
 
     tags.fold_projects(conn)
 
@@ -243,7 +249,7 @@ def _folder_readmes(conn: sqlite3.Connection) -> None:
 
 def _series_share_tags(conn: sqlite3.Connection) -> None:
     """Occurrences of a repeating event that have no tag link take the tags of the series' first tagged occurrence."""
-    from . import tags
+    from . import tags_legacy as tags
 
     if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'object_tags'").fetchone():
         return
@@ -604,6 +610,10 @@ MIGRATIONS: list[Migration] = [
     Migration(88, "Highlights have a colour", annotation_colors),
     Migration(89, "Bookmarks in books", bookmarks),
     Migration(90, "Time spent reading, by book and day", reading_time),
+    Migration(93, "An attached file can say what language it is in", edition_language),
+    Migration(94, "A library entry belongs to a space", citation_space),
+    Migration(95, "Shelves become tags: every tag sits in one space, every item keeps its own space", migrations_spaces.apply, destructive=True),
+    Migration(96, "Notebook, Library and Finance become modules, left on where they were in use", _modules_stay_on),
 ]
 
 
@@ -681,6 +691,8 @@ def run(conn: sqlite3.Connection) -> list[int]:
     if ahead:
         raise MigrationError(f"This database was migrated by a newer release (migrations {', '.join(map(str, ahead))}). "
                              f"Restore the backup taken before that update, or run the newer release: 'curodav-ctl revert' does the first.")
+    global _existing_install
+    _existing_install = bool(applied_numbers(conn))
     todo = pending(conn)
     backup: Path | None = None
     applied = []

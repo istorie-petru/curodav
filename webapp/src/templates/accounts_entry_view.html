@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_view_rows.html" import vi_rows, vi_row, vi_person %}
+{% from "_inputs.html" import text_input, textarea_input %}
+{% block title %}{{ e.title }}{% endblock %}
+{% block content %}
+{# One vault entry. Secret values are not in this page: Reveal and Copy fetch them one at a time (static/accounts.js). #}
+{% macro secret_value(field) -%}
+<span class="accounts-secret" data-acc-secret data-uuid="{{ e.uuid }}" data-field="{{ field }}">••••••••</span>
+<button type="button" class="icon-btn" data-acc-reveal data-uuid="{{ e.uuid }}" data-field="{{ field }}" title="Reveal" aria-label="Reveal {{ field }}">{{ icon('eye', 'icon-sm') }}</button>
+<button type="button" class="icon-btn" data-acc-copy data-uuid="{{ e.uuid }}" data-field="{{ field }}" title="Copy" aria-label="Copy {{ field }}">{{ icon('copy', 'icon-sm') }}</button>
+{%- endmacro %}
+{% set _upd = '/accounts/entry/' ~ (e.uuid|urlencode) ~ '/update-field' %}
+{% macro text_editor(name, value) %}{{ text_input({'name': name, 'value': value or '', 'class': 'vi-input', 'aria-label': name, 'autocomplete': 'off'}) }}{% endmacro %}
+{% macro secret_editor(name) %}{{ text_input({'name': name, 'value': '', 'class': 'vi-input accounts-masked', 'aria-label': 'New ' ~ name, 'autocomplete': 'off'}) }}{% endmacro %}
+{% set _retire = [{'action': 'delete', 'url': '/accounts/entry/' ~ (e.uuid|urlencode) ~ '/delete', 'mode': 'confirm',
+                   'label': ('Delete ' ~ e.title ~ ' for good? This cannot be undone.') if in_bin else ('Move ' ~ e.title ~ ' to the recycle bin?'), 'redirect': none, 'change': none}] %}
+{% set _menu = ([{'label': 'Earlier versions', 'icon': 'rotate-ccw', 'href': '/accounts/entry/' ~ (e.uuid|urlencode) ~ '/history', 'modal': true}] if e.history else [])
+               + ([{'label': 'Restore', 'icon': 'rotate-ccw', 'form_action': '/accounts/entry/' ~ (e.uuid|urlencode) ~ '/restore'}] if in_bin else []) %}
+{% call modal(kind="view", title=e.title, size="medium", retire=_retire, edit_url='/accounts/entry/' ~ (e.uuid|urlencode) ~ '/edit', done_menu=_menu) %}
+{% call vi_rows() %}
+    {% call vi_row(e.type_icon, 'Type') %}{{ e.type_name }}{% endcall %}
+    {% call vi_row('layers', 'Space') %}{{ e.space or 'No space' }}{% endcall %}
+    {% if e.username or 'UserName' in shown %}{% call vi_row('user', 'User name', field='UserName', url=_upd, editor=text_editor('UserName', e.username), empty='Add a user name') %}{% if e.username %}<span>{{ e.username }}</span><button type="button" class="icon-btn" data-acc-copy data-uuid="{{ e.uuid }}" data-field="UserName" title="Copy" aria-label="Copy the user name">{{ icon('copy', 'icon-sm') }}</button>{% else %}<span class="vi-empty">Add a user name</span>{% endif %}{% endcall %}{% endif %}
+    {% if e.has_password or 'Password' in shown %}{% call vi_row('key', 'Password', field='Password', url=_upd, editor=secret_editor('Password'), empty='Add a password', secret=true) %}{% if e.has_password %}{{ secret_value('Password') }}{% else %}<span class="vi-empty">Add a password</span>{% endif %}{% endcall %}{% endif %}
+    {% if e.has_otp %}{% call vi_row('clock', 'One-time code') %}<span class="accounts-otp" data-acc-otp data-uuid="{{ e.uuid }}">······</span><span class="accounts-otp-left" data-acc-otp-left></span><button type="button" class="icon-btn" data-acc-copy-otp data-uuid="{{ e.uuid }}" title="Copy" aria-label="Copy the one-time code">{{ icon('copy', 'icon-sm') }}</button>{% endcall %}{% endif %}
+    {% if e.url or 'URL' in shown %}{% call vi_row('external-link', 'Address', field='URL', url=_upd, editor=text_editor('URL', e.url), empty='Add an address') %}{% if e.url %}<a href="{{ e.url if '://' in e.url else 'https://' ~ e.url }}" target="_blank" rel="noopener noreferrer">{{ e.url }}</a>{% else %}<span class="vi-empty">Add an address</span>{% endif %}{% endcall %}{% endif %}
+    {% for f in e.custom %}
+    {% if f.protected %}
+    {% call vi_row('lock', f.key, field=f.key, url=_upd, editor=secret_editor(f.key), secret=true) %}{{ secret_value(f.key) }}{% endcall %}
+    {% else %}
+    {% call vi_row('file-text', f.key, field=f.key, url=_upd, editor=text_editor(f.key, f.value), empty='Empty') %}{% if f.value %}{{ f.value }}{% else %}<span class="vi-empty">Empty</span>{% endif %}{% endcall %}
+    {% endif %}
+    {% endfor %}
+    {% if contact %}{% call vi_row('user', 'Person') %}<a href="/contacts/{{ contact.uid }}">{{ vi_person(contact) }}</a>{% endcall %}{% endif %}
+    {% if e.tags %}{% call vi_row('tag', 'Tags') %}{% for t in e.tags %}<span class="cell-tag tag-gray">{{ t }}</span> {% endfor %}{% endcall %}{% endif %}
+    {% if e.expires %}{% call vi_row('flag', 'Expires') %}<span class="cell-tag tag-{{ 'red' if e.expired else 'gray' }}">{{ e.expires | short_day }}</span>{% endcall %}{% endif %}
+    {% if e.notes or 'Notes' in shown %}{% call vi_row('align-left', 'Notes', field='Notes', url=_upd, editor=textarea_input({'name': 'Notes', 'aria-label': 'Notes'}, e.notes), empty='Add notes') %}{% if e.notes %}<span class="accounts-notes">{{ e.notes }}</span>{% else %}<span class="vi-empty">Add notes</span>{% endif %}{% endcall %}{% endif %}
+    {% if e.attachments %}{% call vi_row('file', 'Attachments') %}{{ e.attachments | join(', ') }}{% endcall %}{% endif %}
+{% endcall %}
+{% endcall %}
+{% endblock %}

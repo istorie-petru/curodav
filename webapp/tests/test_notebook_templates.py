@@ -65,7 +65,7 @@ def test_templates_do_not_count_in_the_folders(conn):
     _note(conn, "n")
     _note(conn, "t", template=True)
     folders = db.list_notebook_folders(conn)
-    assert [f["count"] for f in folders["labels"]] == [1]
+    assert [f["count"] for f in folders["spaces"]] == [1]
 
 
 def test_search_contents_skips_templates(conn):

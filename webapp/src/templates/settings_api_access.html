@@ -1,14 +1,16 @@
 {% set page_add = {'href': '/settings/api-access/new', 'label': 'New token'} %}
 {% from "_empty_state.html" import empty_state %}
+{% from "_section_row.html" import section_row %}
 {% extends "base.html" %}
 {% block title %}API access - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("API access", "key") }}
+<div class="settings-stack">
 {% include "_flash.html" %}
 {% if fresh_secret %}
+{% call section_row('') %}New token{% endcall %}
 <div class="card" id="api-fresh-token">
-    <h2>New token</h2>
     <p>Copy it now; it is not shown again.</p>
     <div class="settings-field-row">
         <code class="api-secret">{{ fresh_secret }}</code>
@@ -17,8 +19,8 @@
     </div>
 </div>
 {% endif %}
+{% call section_row('') %}Connector{% endcall %}
 <div class="card">
-    <h2>Connector</h2>
     <div class="settings-field-row">
         <span class="settings-field-label">MCP address</span>
         <span class="spacer"></span>
@@ -53,16 +55,17 @@
     </tbody>
 </table>
 {% endmacro %}
+{% call section_row('') %}Tokens{% endcall %}
 <div class="card table-scroll table-responsive">
-    <div class="table-toolbar"><h2>Tokens</h2></div>
+    <div class="table-toolbar"></div>
     {% if personal %}{{ token_table(personal, 'token') }}{% else %}{{ empty_state('No tokens', icon_name='key', size='compact') }}{% endif %}
 </div>
+{% call section_row('') %}Connected apps{% endcall %}
 <div class="card table-scroll table-responsive">
-    <h2>Connected apps</h2>
     {% if apps %}{{ token_table(apps, 'app') }}{% else %}{{ empty_state('No connected apps', icon_name='link', size='compact') }}{% endif %}
 </div>
+{% call section_row('') %}Changes{% endcall %}
 <div class="card table-scroll table-responsive" id="api-changes">
-    <h2>Changes</h2>
     {% if changes %}
     <table class="entity-table">
         <thead><tr><th class="col-opt-1">When</th><th class="col-name">What</th><th class="col-opt-2">Who</th><th class="col-actions">Actions</th></tr></thead>
@@ -88,8 +91,8 @@
     {{ empty_state('No changes in the last 7 days', icon_name='rotate-ccw', size='compact') }}
     {% endif %}
 </div>
+{% call section_row('') %}Recent activity{% endcall %}
 <div class="card log-view" id="api-activity">
-    <h2>Recent activity</h2>
     {% if visits %}
     <div class="log-lines">
         {% for v in visits %}
@@ -112,5 +115,6 @@
     {% else %}
     {{ empty_state('Nothing yet', icon_name='list', size='compact') }}
     {% endif %}
+</div>
 </div>
 {% endblock %}

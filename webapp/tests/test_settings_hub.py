@@ -131,17 +131,16 @@ class TestSettingsHub:
         urls = {c["url"] for c in resp.context["categories"]}
         assert urls == {
             "/settings/general",
-            "/settings/defaults",
+            "/settings/modules",
+            "/settings/tasks",
             "/settings/your-profile",
             "/settings/notifications",  # 2026-09-27
             "/settings/appearance",
             "/settings/labels",
             "/settings/groups",
-            "/settings/calibre",
-            "/settings/tags",
             "/settings/notebook",  # 2026-10-02
             "/settings/library",
-            "/settings/finance-accounts",
+            "/settings/finance",
             "/settings/calendar",
             "/settings/data-maintenance",
             "/settings/logs",

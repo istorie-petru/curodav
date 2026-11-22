@@ -13,7 +13,17 @@ from ..deps import get_db, respond, templates, wants_json
 from .labels import COLORS
 
 router = APIRouter(prefix="/finance", tags=["finance"])
-settings_router = APIRouter(prefix="/settings/finance-accounts", tags=["finance-settings"])
+settings_router = APIRouter(prefix="/settings/finance", tags=["finance-settings"])
+old_settings_router = APIRouter(prefix="/settings/finance", tags=["finance-settings"])
+
+
+@old_settings_router.get("")
+@old_settings_router.get("/{rest:path}")
+def old_finance_settings(request: Request, rest: str = ""):
+    """The accounts page used to be at /settings/finance."""
+    query = request.url.query
+    return RedirectResponse(f"/settings/finance{'/' + rest if rest else ''}{'?' + query if query else ''}", status_code=307)
+
 
 def _month(value: str, today: date) -> str:
     """The month shown, as YYYY-MM; anything unusable falls back to the current month."""
@@ -188,6 +198,8 @@ def accounts_page(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse("finance_accounts.html", {
         "request": request, "crumbs": [{"url": "/settings", "name": "Settings"}], "active_tab": "settings_finance_accounts", "accounts": accounts,
         "type_names": dict(finance_stats.ACCOUNT_TYPES), "money": finance_stats.format_money,
+        "current_default_currency": finance.default_currency(conn),
+        "currency_options": [{"uid": "", "name": "None"}] + [{"uid": c, "name": c} for c in finance_stats.CURRENCIES],
     })
 
 
@@ -205,23 +217,23 @@ def _account_context(request: Request, conn, account: dict | None, action: str) 
 
 @settings_router.get("/new")
 def new_account_modal(request: Request, conn=Depends(get_db)):
-    return templates.TemplateResponse("finance_account_modal.html", _account_context(request, conn, None, "/settings/finance-accounts"))
+    return templates.TemplateResponse("finance_account_modal.html", _account_context(request, conn, None, "/settings/finance"))
 
 
 @settings_router.get("/{uid}/edit")
 def edit_account_modal(uid: str, request: Request, conn=Depends(get_db)):
     account = finance.get_account(conn, uid)
     if account is None:
-        return RedirectResponse(url="/settings/finance-accounts", status_code=303)
-    return templates.TemplateResponse("finance_account_modal.html", _account_context(request, conn, account, f"/settings/finance-accounts/{uid}/update"))
+        return RedirectResponse(url="/settings/finance", status_code=303)
+    return templates.TemplateResponse("finance_account_modal.html", _account_context(request, conn, account, f"/settings/finance/{uid}/update"))
 
 
 def _save_account(conn, form: dict, x_requested_with, uid: str | None):
     clean, error = finance.validate_account(conn, form, uid)
     if error:
-        return _error_response(error, x_requested_with, "/settings/finance-accounts")
+        return _error_response(error, x_requested_with, "/settings/finance")
     new_uid = finance.save_account(conn, clean, uid)
-    return respond(x_requested_with, "/settings/finance-accounts", status_code=200 if uid else 201, uid=new_uid)
+    return respond(x_requested_with, "/settings/finance", status_code=200 if uid else 201, uid=new_uid)
 
 
 @settings_router.post("")
@@ -236,7 +248,7 @@ def update_account(uid: str, name: str = Form(""), abbreviation: str = Form(""),
                    opening_balance: str = Form(""), opening_date: str = Form(""),
                    x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     if finance.get_account(conn, uid) is None:
-        return RedirectResponse(url="/settings/finance-accounts", status_code=303)
+        return RedirectResponse(url="/settings/finance", status_code=303)
     form = dict(name=name, abbreviation=abbreviation, type=type, currency=currency, opening_balance=opening_balance, opening_date=opening_date)
     return _save_account(conn, form, x_requested_with, uid)
 
@@ -244,4 +256,4 @@ def update_account(uid: str, name: str = Form(""), abbreviation: str = Form(""),
 @settings_router.post("/{uid}/delete")
 def delete_account(uid: str, x_requested_with: str | None = Header(default=None), conn=Depends(get_db)):
     finance.delete_account(conn, uid)
-    return respond(x_requested_with, "/settings/finance-accounts")
+    return respond(x_requested_with, "/settings/finance")

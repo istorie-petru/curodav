@@ -3684,6 +3684,11 @@ button.btn.btn-sm, a.btn.btn-sm{padding:4px 10px; font-size:var(--text-sm);}
 .settings-field-row .settings-field-label{min-width:0; flex:0 1 auto; overflow-wrap:anywhere;}
 .settings-field-row input[type="text"]{flex:0 1 220px; min-width:120px; width:auto;}
 .settings-field-row > :is(.multiselect, .btn, form){flex-shrink:0;}
+/* Every control of a settings row is the same width, so the controls line up down the page. */
+.settings-field-row{--settings-control-w:16rem;}
+.settings-field-row > .multiselect, .settings-field-row > .multiselect .ms-trigger, .settings-field-row input[type="text"], .settings-field-row input[type="email"], .settings-field-row input[type="number"], .settings-field-row input[type="time"]{width:var(--settings-control-w); max-width:100%; box-sizing:border-box;}
+.settings-field-row > .multiselect, .settings-field-row input[type="text"], .settings-field-row input[type="email"], .settings-field-row input[type="number"], .settings-field-row input[type="time"]{flex:0 0 var(--settings-control-w); min-width:0;}
+@media (max-width:640px){.settings-field-row{flex-wrap:wrap;}.settings-field-row .settings-field-label{max-width:100%; flex:1 1 100%;}.settings-field-row{--settings-control-w:100%;}.settings-field-row .spacer{display:none;}}
 .settings-field-row .ms-trigger, .settings-field-row .btn{white-space:nowrap;}
 .label-project-fields{margin-top:var(--space-3);}
 
@@ -5457,3 +5462,93 @@ input.is-greyed{opacity:.5; background:var(--bg-hover, transparent);}
 .toast-bar.is-indeterminate .toast-bar-fill{width:35%; animation:toast-bar-slide 1.2s ease-in-out infinite;}
 @keyframes toast-bar-slide{0%{transform:translateX(-100%);} 100%{transform:translateX(300%);}}
 @media (prefers-reduced-motion: reduce){.toast-bar.is-indeterminate .toast-bar-fill{animation:none; width:100%;}}
+
+/* Accounts vault (features/accounts-vault.md) */
+.accounts-list-head{display:flex; align-items:center; gap:var(--space-2); margin-bottom:var(--space-2);}
+.accounts-list-head .sec-heading{margin:0;}
+.accounts-sidebar{gap:var(--space-5);}
+.accounts-side-section{display:flex; flex-direction:column; gap:2px;}
+.accounts-side-title{font-size:var(--text-sm); color:var(--fg-tertiary); font-weight:500; margin:0 0 var(--space-1) var(--space-2);}
+.accounts-side-row{display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2); border-radius:var(--radius-card); color:var(--fg-primary); min-width:0;}
+.accounts-side-row:hover{background:var(--row-hover); text-decoration:none;}
+.accounts-side-row.active{background:var(--row-hover);}
+.accounts-side-name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.accounts-side-row .sidebar-group-glyph{flex:0 0 auto;}
+.accounts-side-row.is-zero{color:var(--fg-secondary);}
+.accounts-count{color:var(--fg-tertiary); font-size:var(--text-sm);}
+.accounts-health-score{display:flex; align-items:baseline; gap:var(--space-2); padding:0 var(--space-2);}
+.accounts-health-number{font-size:1.6em; font-weight:600;}
+.accounts-health-text{color:var(--fg-secondary); font-size:var(--text-sm);}
+.accounts-health-bar, .accounts-meter-bar{display:block; height:6px; border-radius:3px; background:var(--row-hover); overflow:hidden; margin:var(--space-1) var(--space-2) var(--space-2);}
+.accounts-health-fill, .accounts-meter-fill{display:block; height:100%; border-radius:3px; background:var(--accent);}
+.accounts-health-fill.tone-poor{background:var(--danger, #d9534f);}
+.accounts-health-fill.tone-fair{background:var(--warning, #e0a800);}
+.accounts-meter{display:flex; align-items:center; gap:var(--space-2); margin-top:var(--space-2);}
+.accounts-meter .accounts-meter-bar{flex:1; margin:0;}
+.accounts-meter-text{color:var(--fg-secondary); font-size:var(--text-sm); white-space:nowrap;}
+.accounts-generated input{font-family:var(--font-mono, monospace);}
+.accounts-recent .contact-row{font-family:var(--font-mono, monospace); cursor:pointer; border:0; background:none; width:100%; text-align:left; color:var(--fg-primary);}
+.accounts-secret, .accounts-otp{font-family:var(--font-mono, monospace); letter-spacing:0.04em; overflow-wrap:anywhere;}
+.accounts-otp{font-size:var(--text-lg, 1.1em);}
+.accounts-otp-left{color:var(--fg-tertiary); font-size:var(--text-sm); margin:0 var(--space-2);}
+.accounts-notes{white-space:pre-wrap;}
+.accounts-masked{-webkit-text-security:disc; text-security:disc;}
+.accounts-fields{grid-template-columns:1fr;}
+.accounts-field .field-label-row{display:flex; align-items:center; gap:var(--space-1);}
+.accounts-field .field-label-row label{flex:1;}
+.accounts-field-row{display:grid; grid-template-columns:1fr 1.4fr auto auto; gap:var(--space-2); align-items:end;}
+.accounts-side-tools{display:flex; align-items:center; gap:var(--space-1);}
+.accounts-side-tools .accounts-search{flex:1; min-width:0;}
+.accounts-side-tools .accounts-search .search-field{width:100%;}
+/* The notebook hides its sidebar below 860px; Accounts keeps it as a right rail down to 720px and stacks it above the list
+   below that, collapsible at every width. */
+@media (max-width:860px){
+  body:has(main.accounts-page) #notebook-sidebar-toggle{display:inline-flex;}
+  .accounts-field-row{grid-template-columns:1fr 1fr;}
+}
+@media (max-width:860px) and (min-width:721px){
+  main.accounts-page .accounts-sidebar{display:flex; position:fixed; right:0; width:240px; height:auto; border-left:1px solid var(--separator); border-top:none;}
+  main.accounts-page:has(.accounts-sidebar){margin-right:240px;}
+}
+@media (max-width:720px){
+  main.accounts-page:has(.accounts-sidebar){display:flex; flex-direction:column;}
+  main.accounts-page .accounts-sidebar{display:flex; position:static; width:auto; height:auto; max-height:none; overflow:visible; order:1; border-left:none; border-top:none; border-bottom:1px solid var(--separator); padding:var(--space-2) 0; margin-bottom:var(--space-3); background:none;}
+  main.accounts-page .accounts-main{order:2;}
+}
+html[data-notebook-sidebar-collapsed] body main.accounts-page .accounts-sidebar{display:none;}
+html[data-notebook-sidebar-collapsed] body main.accounts-page:has(.accounts-sidebar){margin-right:0;}
+.accounts-standard-name, .accounts-standard-kind{display:flex; align-items:center; gap:var(--space-1); min-height:36px; color:var(--fg-secondary);}
+.accounts-label-actions{display:inline-flex; align-items:center; gap:var(--space-1);}
+.accounts-list-head .select-all{margin-right:var(--space-2);}
+.accounts-bulk-bar{display:flex; align-items:center; gap:var(--space-1); margin-left:var(--space-3);}
+.accounts-bulk-bar[hidden]{display:none;}
+.accounts-bulk-count{color:var(--fg-secondary); font-size:var(--text-sm); margin-right:var(--space-1);}
+.accounts-row.is-selected{background:var(--row-hover);}
+.accounts-row .row-select{margin:0 var(--space-2);}
+.accounts-side-row.is-drop{background:var(--row-hover); outline:2px dashed var(--accent); outline-offset:-2px;}
+
+/* Settings tables: every row the same height, a title never wraps and ends in dots when it is too long. */
+.settings-table{table-layout:fixed; width:100%;}
+.settings-table tbody td{height:52px; padding-top:0; padding-bottom:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;}
+.settings-table .col-name{width:auto; max-width:none;}
+.settings-table .col-meta{width:22%; min-width:0;}
+.settings-table .col-actions-narrow{width:56px; text-align:right; overflow:visible;}
+.settings-table .label-name{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.settings-ellipsis{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.settings-stack{display:flex; flex-direction:column; gap:var(--space-3);}
+.settings-table .col-num{width:88px; min-width:0; text-align:right; color:var(--fg-secondary); font-size:var(--text-sm);}
+.settings-table .col-meta.col-wide{width:30%;}
+
+/* Logs: rows in one card instead of a card per line, with the level switch and the lines in the same card. */
+.log-view{gap:var(--space-2);}
+.log-view .segmented{align-self:flex-start;}
+.log-lines{gap:0; max-height:50vh;}
+.log-lines .log-card{border:0; border-radius:0; border-top:1px solid var(--separator); background:none; padding:0;}
+.log-lines .log-card:first-child{border-top:0;}
+.log-lines .log-card-head{min-height:34px;}
+.log-lines .log-card.is-warning, .log-lines .log-card.is-error, .log-lines .log-card.is-critical{border-left-width:3px; padding-left:var(--space-2);}
+#timings .settings-table tbody td, #timings .settings-table thead th{height:34px; font-size:var(--text-sm);}
+.log-card-level{flex:none; width:72px; font-size:var(--text-sm); color:var(--fg-tertiary);}
+.log-card.is-warning .log-card-level{color:var(--warning, var(--fg-secondary));}
+.log-card.is-error .log-card-level, .log-card.is-critical .log-card-level{color:var(--danger);}
+.log-lines .log-card.is-warning, .log-lines .log-card.is-error, .log-lines .log-card.is-critical{border-left:0; padding-left:0;}

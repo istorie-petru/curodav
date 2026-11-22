@@ -194,7 +194,7 @@ def _generate(conn, series: dict[str, Any], template: dict[str, Any], first_uid:
         if contacts:
             db.set_object_contacts(conn, "event", uid, contacts)
         if tag_links:
-            tag_store.set_object_tags(conn, "event", uid, tag_links)
+            tag_store.record(conn, "event", uid, tag_links)
         made += 1
     return made
 

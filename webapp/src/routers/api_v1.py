@@ -42,10 +42,10 @@ def search(request: Request, q: str, kinds: Annotated[list[str] | None, Query()]
 
 
 @router.get("/notes")
-def list_notes(request: Request, shelf: str = "", tag: str = "", note_type: str = "", updated_since: str = "", cursor: str = "",
+def list_notes(request: Request, space: str = "", tag: str = "", note_type: str = "", updated_since: str = "", cursor: str = "",
                limit: Limit = 30, conn=Depends(get_db), token=Depends(require("read:notes"))):
     _log(conn, token, request)
-    return api_service.list_notes(conn, shelf=shelf, tag=tag, note_type=note_type, updated_since=updated_since,
+    return api_service.list_notes(conn, space=space, tag=tag, note_type=note_type, updated_since=updated_since,
                                   cursor=cursor, limit=limit)
 
 

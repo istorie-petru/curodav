@@ -17,7 +17,8 @@ from collections import deque
 
 ROOT_NAME = "curodav"
 # Each view shows exactly its own category ("all" shows everything).
-LEVELS = {"all": None, "important": {"info"}, "warnings": {"warning"}, "errors": {"error", "critical"}}
+LEVELS = {"all": None, "important": {"info"}, "warnings": {"warning"}, "errors": {"error", "critical"},
+          "notable": {"info", "warning", "error", "critical"}}
 RING_SIZE = 2000
 
 _SECRET = re.compile(r"(?i)\b(password|passwd|token|secret|recovery|session|cookie|authorization)(\s*[=:]\s*)\S+")

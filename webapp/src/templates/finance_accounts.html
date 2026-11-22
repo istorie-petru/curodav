@@ -1,13 +1,20 @@
-{% set page_add = {'href': '/settings/finance-accounts/new', 'label': 'New account'} %}
+{% set page_add = {'href': '/settings/finance/new', 'label': 'New account'} %}
 {% from "_inputs.html" import checkbox_input %}
 {% from "_row_action_buttons.html" import row_action_buttons %}
 {% from "_empty_state_row.html" import empty_state_row %}
 {% extends "base.html" %}
-{% block title %}Finance accounts - Settings{% endblock %}
+{% block title %}Finance - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
-{{ page_header_narrow("Finance accounts", "credit-card") }}
+{{ page_header_narrow("Finance", "dollar-sign") }}
+{% from "_settings_rows.html" import select_row %}
+{% from "_section_row.html" import section_row %}
 <div class="settings-group">
+{% call section_row('') %}Defaults{% endcall %}
+<div class="card">
+    {{ select_row('/settings/default-currency', 'default-currency-form', 'currency', 'Default currency', 'New finance accounts start with it', currency_options, current_default_currency) }}
+</div>
+{% call section_row('') %}Accounts{% endcall %}
 <div class="card table-scroll table-responsive" id="finance-accounts-wrapper">
     <table id="finance-accounts-table">
         <thead>
@@ -28,7 +35,7 @@
                 <td class="col-opt-2">{{ type_names.get(a.type, a.type) }}</td>
                 <td class="col-opt-1">{{ a.currency }}</td>
                 <td class="col-opt-2 finance-num">{{ money(a.balance, a.currency) }}</td>
-                <td>{{ row_action_buttons("/settings/finance-accounts/" ~ a.uid ~ "/edit", "/settings/finance-accounts/" ~ a.uid ~ "/delete", "account",
+                <td>{{ row_action_buttons("/settings/finance/" ~ a.uid ~ "/edit", "/settings/finance/" ~ a.uid ~ "/delete", "account",
                     'Delete "' ~ a.name ~ '"?' ~ (' Its ' ~ a.transaction_count ~ ' transactions are deleted with it.' if a.transaction_count else '')) }}</td>
             </tr>
             {% else %}

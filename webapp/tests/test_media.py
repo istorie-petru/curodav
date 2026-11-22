@@ -299,30 +299,4 @@ def test_progress_is_worded_for_each_kind(type_key, row, text):
     assert media.progress_text(row, media.kind_for(type_key)) == text
 
 
-def test_an_entry_carries_curodav_tags_and_the_library_filters_by_tag_and_shelf(conn):
-    from src import tags as tag_store
-    from src.routers import notebook as notebook_router
 
-    conn.execute("INSERT INTO label_tags (name, label_name, color) VALUES ('sf', 'Reading list', 'blue')")
-    conn.commit()
-    body = notebook_router.create_citation(title="Dune", type="book", year="", container_title="", author_family=[], author_given=[],
-                                           item_tags=["sf"], item_tags_field="1", x_requested_with="fetch", conn=conn).body
-    uid = json.loads(body)["uid"]
-    db.upsert_citation(conn, {"title": "Untagged"})
-    assert tag_store.tags_for_object(conn, "media", uid) == ["sf"]
-    assert [c["uid"] for c in db.page_citations(conn, tags=["SF"])["items"]] == [uid]
-    assert [c["uid"] for c in db.page_citations(conn, shelves=["Reading list"])["items"]] == [uid]
-    db.delete_citation(conn, uid)
-    assert tag_store.tags_for_object(conn, "media", uid) == []
-
-
-def test_a_shelf_page_links_to_its_library_entries_only_when_it_has_some(conn):
-    from src.routers import label_pages
-
-    conn.execute("INSERT INTO label_tags (name, label_name, color) VALUES ('sf', 'Reading list', 'blue')")
-    conn.commit()
-    assert label_pages._page_common(conn, "Reading list")["library_count"] == 0
-    uid = db.upsert_citation(conn, {"title": "Dune"})
-    from src import tags as tag_store
-    tag_store.set_object_tags(conn, "media", uid, ["sf"])
-    assert label_pages._page_common(conn, "Reading list")["library_count"] == 1

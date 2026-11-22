@@ -23,7 +23,7 @@
 </form>
 {% if contact_tags %}
 {% set fd_name = 'tag' %}
-{% set fd_label = 'Shelf' %}
+{% set fd_label = 'Tag' %}
 {% set fd_items = [] %}
 {% for _it in contact_filter_items %}{% set _ = fd_items.append(_it) %}{% endfor %}
 {% set fd_selected = active_tags %}
@@ -33,7 +33,7 @@
 {% endif %}
 {% set fd_name = 'group' %}
 {% set fd_label = 'Group by' %}
-{% set fd_items = [{'value': '', 'name': 'A to Z'}, {'value': 'shelf', 'name': 'Shelf'}, {'value': 'org', 'name': 'Organization'}] %}
+{% set fd_items = [{'value': '', 'name': 'A to Z'}, {'value': 'space', 'name': 'Space'}, {'value': 'tag', 'name': 'Tag'}, {'value': 'org', 'name': 'Organization'}] %}
 {% set fd_selected = group %}
 {% set fd_mode = 'single' %}
 {% set fd_form_id = 'contacts-filters-form' %}

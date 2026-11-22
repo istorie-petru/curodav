@@ -12,7 +12,7 @@
     <div class="field-grid">
         <div class="field field-wide"><label>Name</label>{{ text_input({'name': 'name', 'value': (semester.name if semester else ''), 'required': true}) }}</div>
         <div class="field field-wide">
-            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-semester-form' %}{% set ms_name = 'shelf' %}{% set ms_label = 'Shelf' %}
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'university-semester-form' %}{% set ms_name = 'shelf' %}{% set ms_label = 'Code' %}
             {% set ms_items = [] %}{% if not semester %}{% set _ = ms_items.append({'uid': '', 'name': 'Create one from the name'}) %}{% endif %}
             {% for n in shelves %}{% set _ = ms_items.append({'uid': n, 'name': n}) %}{% endfor %}
             {% set ms_selected = semester.shelf_name if semester else '' %}{% set ms_wide = false %}

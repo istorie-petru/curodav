@@ -75,6 +75,27 @@ def editions_in_calibre(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_citation_editions_calibre ON citation_editions(calibre_uuid) WHERE calibre_uuid != ''")
 
 
+def edition_language(conn: sqlite3.Connection) -> None:
+    """An edition (the attached file of a library entry) can say what language it is in, which reading aloud follows."""
+    if "language" not in _columns(conn, "citation_editions"):
+        conn.execute("ALTER TABLE citation_editions ADD COLUMN language TEXT NOT NULL DEFAULT ''")
+
+
+def citation_space(conn: sqlite3.Connection) -> None:
+    """A library entry belongs to one space. Entries that were tagged get the space of their tags' shelves when those agree."""
+    if "space" not in _columns(conn, "citations"):
+        conn.execute("ALTER TABLE citations ADD COLUMN space TEXT NOT NULL DEFAULT ''")
+    have = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if not {"object_tags", "label_tags", "label_config"} <= have:
+        return
+    rows = conn.execute(
+        "SELECT ot.object_id, MIN(TRIM(c.label_group)) AS space FROM object_tags ot JOIN label_tags t ON t.name = ot.tag_name COLLATE NOCASE "
+        "JOIN label_config c ON c.name = t.label_name COLLATE NOCASE WHERE ot.object_type = 'media' AND TRIM(COALESCE(c.label_group, '')) != '' "
+        "GROUP BY ot.object_id HAVING COUNT(DISTINCT TRIM(c.label_group)) = 1").fetchall()
+    for uid, space in rows:
+        conn.execute("UPDATE citations SET space = ? WHERE uid = ? AND space = ''", (space, uid))
+
+
 def cite_an_edition(conn: sqlite3.Connection) -> None:
     """A note's bibliography can cite one edition of a work; blank cites the work."""
     if "edition_uid" not in _columns(conn, "notebook_citations"):

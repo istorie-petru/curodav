@@ -29,6 +29,9 @@ def _doc(conn, uid, title=None, **overrides):
     row = {"uid": uid, "title": title or uid, "content_json": '{"blocks": []}', "document_type": "full",
            "note_type": "", "created_at": now, "updated_at": now, "tags": []}
     row.update(overrides)
+    for name in row["tags"]:  # each tag sits in a space of the same name
+        db.ensure_group(conn, name)
+        db.upsert_label_config(conn, {"name": name, "label_group": name})
     db.upsert_notebook_document(conn, row)
 
 
@@ -43,64 +46,58 @@ def _json_request(payload):
 
 
 class TestHome:
-    def test_the_home_shows_project_and_label_folders_and_the_library(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": True})
+    def test_the_home_shows_space_folders_and_the_library(self, conn):
         _doc(conn, "a", tags=["Thesis"])
         _doc(conn, "b", tags=["Reading"])
         _doc(conn, "c")
         body = notebook_router.list_documents(_request(), conn=conn).body.decode()
         for text in ("Thesis", "Reading", "Unfiled", "Entries", "Templates"):
             assert text in body
-        assert "/notebook/folder?kind=project&amp;name=Thesis" in body or "/notebook/folder?kind=project&name=Thesis" in body
+        assert "/notebook/folder?kind=space&amp;name=Thesis" in body or "/notebook/folder?kind=space&name=Thesis" in body
 
     def test_an_empty_notebook_shows_the_empty_state(self, conn):
         body = notebook_router.list_documents(_request(), conn=conn).body.decode()
         assert "No documents yet" in body
 
-    def test_the_label_report_notice_shows_until_dismissed(self, conn):
-        db.set_app_meta(conn, "notebook_label_report", json.dumps([{"uid": "a", "title": "A", "kept": ["X"], "dropped": ["Y"]}]))
-        assert "had several shelves" in notebook_router.list_documents(_request(), conn=conn).body.decode()
-        notebook_router.dismiss_label_report(conn=conn)
-        assert "had several shelves" not in notebook_router.list_documents(_request(), conn=conn).body.decode()
 
 
 class TestFolder:
     def test_a_folder_lists_only_its_notes_with_selection_boxes(self, conn):
         _doc(conn, "a", title="Thesis note", note_type="notes", tags=["Uni"])
         _doc(conn, "b", title="Other", tags=["Elsewhere"])
-        resp = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn)
+        resp = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", conn=conn)
         body = resp.body.decode()
         assert "Thesis note" in body and "Other" not in body and 'data-uid="a"' in body and "row-select" in body
 
     def test_the_type_filter_narrows_a_folder(self, conn):
         _doc(conn, "a", note_type="notes", tags=["Uni"])
         _doc(conn, "b", note_type="wiki", tags=["Uni"])
-        resp = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", note_type="wiki", conn=conn)
+        resp = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", note_type="wiki", conn=conn)
         assert [d["uid"] for d in resp.context["documents"]] == ["b"]
 
     def test_a_folder_sorts_by_title_on_request(self, conn):
         _doc(conn, "a", title="Zed", tags=["Uni"])
         _doc(conn, "b", title="Alpha", tags=["Uni"])
-        resp = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", sort="title", conn=conn)
+        resp = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", sort="title", conn=conn)
         assert [d["title"] for d in resp.context["documents"]] == ["Alpha", "Zed"]
 
     def test_first_page_is_thirty_rows_with_a_load_more_link(self, conn):
         for n in range(45):
             _doc(conn, f"d{n:02d}", tags=["Uni"])
-        resp = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn)
+        resp = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", conn=conn)
         assert len(resp.context["documents"]) == 30
         assert 'id="notebook-load-more"' in resp.body.decode()
 
     def test_no_button_when_everything_fits(self, conn):
         for n in range(5):
             _doc(conn, f"d{n}", tags=["Uni"])
-        body = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn).body.decode()
+        body = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", conn=conn).body.decode()
         assert 'id="notebook-load-more"' not in body
 
     def test_the_rows_endpoint_returns_the_rest(self, conn):
         for n in range(45):
             _doc(conn, f"d{n:02d}", title=f"Doc {n:02d}", tags=["Uni"])
-        data = json.loads(notebook_router.folder_rows(_request("/notebook/folder/rows"), kind="label", name="Uni", sort="title", offset=30, conn=conn).body)
+        data = json.loads(notebook_router.folder_rows(_request("/notebook/folder/rows"), kind="space", name="Uni", sort="title", offset=30, conn=conn).body)
         assert data["has_more"] is False
         assert data["html"].count('class="contact-row-wrap"') == 15 and "Doc 44" in data["html"]
 
@@ -126,6 +123,9 @@ class TestBulk:
     def test_bulk_edit_sets_the_tag_and_the_type(self, conn):
         _doc(conn, "a", tags=["Old"], note_type="notes")
         _doc(conn, "b", tags=["Other"])
+        db.upsert_label_config(conn, {"name": "New", "label_group": "Old"})
+        db.upsert_label_config(conn, {"name": "Old", "label_group": "Old"})
+        db.upsert_label_config(conn, {"name": "Other", "label_group": "Old"})
         notebook_router.bulk_edit(uids=["a", "b"], tag="New", note_type="wiki", x_requested_with=None, conn=conn)
         for uid in ("a", "b"):
             doc = db.get_notebook_document(conn, uid)
@@ -170,19 +170,19 @@ class TestPinned:
     def test_a_pinned_note_still_lives_in_its_folder(self, conn):
         _doc(conn, "a", tags=["Uni"])
         notebook_router.pin_document("a", pinned="1", x_requested_with=None, conn=conn)
-        assert [d["uid"] for d in notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn).context["documents"]] == ["a"]
+        assert [d["uid"] for d in notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", conn=conn).context["documents"]] == ["a"]
 
 
 class TestBackToTheFolder:
     def test_a_folder_page_has_a_back_arrow_to_the_notebook_home(self, conn):
         _doc(conn, "a", tags=["Uni"])
-        ctx = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn).context
+        ctx = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", conn=conn).context
         assert ctx["crumbs"] == [{"url": "/notebook", "name": "Notebook"}]
 
     def test_a_note_opened_from_a_folder_goes_back_to_that_folder(self, conn):
         _doc(conn, "a", tags=["Uni"])
-        body = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn).body.decode()
-        assert "back_to=/notebook/folder%3Fkind%3Dlabel%26name%3DUni" in body
+        body = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", conn=conn).body.decode()
+        assert "back_to=/notebook/folder%3Fkind%3Dspace%26name%3DUni" in body
 
 
     def test_the_pin_button_is_in_the_properties_modal_footer_not_the_note_header(self, conn):
@@ -197,7 +197,7 @@ class TestFolderReadmeAndAgenda:
     def test_a_folder_has_no_readme_and_shows_its_pinned_notes_in_the_agenda(self, conn):
         _doc(conn, "a", title="Syllabus", tags=["Uni"], pinned=1)
         _doc(conn, "b", title="Loose note", tags=["Uni"])
-        body = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="Uni", conn=conn).body.decode()
+        body = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="Uni", conn=conn).body.decode()
         assert 'id="notebook-readme"' not in body and "/notebook/folder/readme" not in body
         agenda = body[body.index('id="notebook-agenda"'):]
         agenda = agenda[:agenda.index("</section>")]
@@ -239,9 +239,9 @@ class TestFolderReadmeAndAgenda:
 class TestTagSubfolders:
     def _shelf(self, conn):
         from src import tags
-        tags.ensure_schema(conn)
-        conn.execute("INSERT INTO label_tags (name, label_name, color) VALUES ('Lectures', 'School', 'blue'), ('Exams', 'School', 'red')")
-        conn.commit()
+        db.ensure_group(conn, "School")
+        db.upsert_label_config(conn, {"name": "Lectures", "color": "blue", "label_group": "School"})
+        db.upsert_label_config(conn, {"name": "Exams", "color": "red", "label_group": "School"})
         for uid, tag in (("a", "Lectures"), ("b", "Lectures"), ("c", "Exams")):
             _doc(conn, uid, tags=["School"])
             tags.set_object_tags(conn, "note", uid, [tag])
@@ -259,7 +259,7 @@ class TestTagSubfolders:
 
     def test_subfolders_are_listed_as_rows_above_the_notes(self, conn):
         self._shelf(conn)
-        body = notebook_router.folder_view(_request("/notebook/folder"), kind="label", name="School", conn=conn).body.decode()
+        body = notebook_router.folder_view(_request("/notebook/folder"), kind="space", name="School", conn=conn).body.decode()
         assert "notebook-folder-row" in body and 'class="folder-grid notebook-subfolders"' not in body
         assert body.index("notebook-folder-row") < body.index('id="notebook-rows"')
 
@@ -268,6 +268,6 @@ class TestTagSubfolders:
         ctx = notebook_router._folder_context(conn, _request(), "label", "School", "", "created", 30, 0)
         assert {d["uid"] for d in ctx["documents"]} == {"a", "b", "c"} and len(ctx["subfolders"]) == 2
 
-    def test_a_shelf_with_only_its_default_tag_has_no_subfolders(self, conn):
+    def test_a_space_lists_the_tags_its_notes_carry_as_subfolders(self, conn):
         _doc(conn, "x", tags=["Reading"])
-        assert db.list_notebook_subfolders(conn, "Reading") == []
+        assert [f["name"] for f in db.list_notebook_subfolders(conn, "Reading")] == ["Reading"]

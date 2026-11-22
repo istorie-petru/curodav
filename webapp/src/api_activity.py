@@ -59,7 +59,7 @@ def describe_tool(conn: sqlite3.Connection, name: str, args: Any) -> tuple[str, 
     elif name in ("create_note", "academic_save_semester"):
         where = str(args.get("title") or args.get("name") or "")
     else:
-        where = str(args.get("discipline") or args.get("name") or args.get("shelf") or args.get("tag") or args.get("q") or "")
+        where = str(args.get("discipline") or args.get("name") or args.get("space") or args.get("tag") or args.get("q") or "")
     return what, where[:120]
 
 

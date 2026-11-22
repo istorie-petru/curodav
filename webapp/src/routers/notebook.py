@@ -28,9 +28,10 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from .. import tags as tag_store
-from .. import app_defaults, citation_formats, clock, db, icon_font, library_query, media, media_books, note_versions, notebook_fields, notebook_find, notebook_mentions
+from .. import app_defaults, book_speech, citation_formats, clock, db, icon_font, library_query, media, media_books, note_versions, notebook_fields, notebook_find, notebook_mentions
 from ..deps import get_db, respond, templates, validation_response, wants_json
 from ..log import get_logger
+from . import defaults
 from . import media as media_router
 from .labels import COLORS, icon_groups_for
 
@@ -44,8 +45,9 @@ def _folder_agenda(conn, name: str) -> dict:
     """The next event's date and the next three dated open tasks for a label or project folder."""
     from . import label_pages
 
-    tasks = [t for t in db.list_tasks_sharing_labels(conn, [name]) if t["status"] != "archived"]
-    items = label_pages._agenda_items(conn, {name}, {}, tasks, 1000)
+    names = {t["name"] for t in tag_store.tags_of_space(conn, name)} or {name}
+    tasks = [t for t in db.list_tasks_sharing_labels(conn, sorted(names)) if t["status"] != "archived"]
+    items = label_pages._agenda_items(conn, names, {}, tasks, 1000)
     event = next((i for i in items if i.get("kind") not in ("task", "habit") and not i.get("is_deadline")), None)
     return {"event": event, "tasks": [i for i in items if i.get("kind") == "task"][:3]}
 
@@ -53,17 +55,18 @@ def _folder_agenda(conn, name: str) -> dict:
 def _folder_context(conn, request: Request, kind: str, name: str, note_type: str, sort: str, limit: int, offset: int, tag: str = "") -> dict:
     from .labels import COLORS  # noqa: F401  (the palette the folder icon colors come from)
 
-    if kind not in ("project", "label", "unfiled", "journal"):
+    kind = "space" if kind in ("label", "project") else kind
+    if kind not in ("space", "unfiled", "journal"):
         kind = "unfiled"
     name = "" if kind == "unfiled" else name
-    tag = tag if kind == "label" else ""
+    tag = tag if kind == "space" else ""
     documents, total = db.list_notebook_folder_documents(conn, kind, name, note_type, sort, "", limit, offset, tag)
     type_looks = db.notebook_note_type_looks(conn)
     for d in documents:
         look = type_looks.get(d.get("note_type") or "", db.NOTEBOOK_TYPE_LOOK_FALLBACK)
         d["type_icon"], d["type_color"] = look["icon"], look["color"]
-    cfg = db.effective_label_config(conn, name) if name else {}
-    subfolders = db.list_notebook_subfolders(conn, name) if kind == "label" and not tag else []
+    cfg = db.get_group_style(conn, name) if kind == "space" else {}
+    subfolders = db.list_notebook_subfolders(conn, name) if kind == "space" and not tag else []
     tag_look = next((f for f in db.list_notebook_subfolders(conn, name) if f["name"] == tag), None) if tag else None
     if tag_look:
         cfg = {"color": tag_look["color"], "icon": tag_look["icon"]}
@@ -89,22 +92,19 @@ def _folder_context(conn, request: Request, kind: str, name: str, note_type: str
         "next_offset": offset + limit,
         "more_href": "/notebook/folder?" + urlencode({**params, "limit": limit + BROWSE_PAGE_SIZE}),
         "rows_query": urlencode(params),
-        "crumbs": [{"url": "/notebook", "name": "Notebook"}] + ([{"url": "/notebook/folder?" + urlencode({"kind": "label", "name": name}), "name": name}] if tag else []),
+        "crumbs": [{"url": "/notebook", "name": "Notebook"}] + ([{"url": "/notebook/folder?" + urlencode({"kind": "space", "name": name}), "name": name}] if tag else []),
         "back_to": "/notebook/folder?" + urlencode({k: v for k, v in (("kind", kind), ("name", name), ("tag", tag)) if v}),
         "back_label": tag or name or "Unfiled",
-        "pinned_here": [d for d in db.list_notebook_folder_documents(conn, kind, name, "", "updated", "", 1000, 0, tag)[0] if d.get("pinned")] if kind in ("project", "label") else [],
-        "agenda": _folder_agenda(conn, name) if kind in ("project", "label") and not tag else None,
+        "pinned_here": [d for d in db.list_notebook_folder_documents(conn, kind, name, "", "updated", "", 1000, 0, tag)[0] if d.get("pinned")] if kind == "space" else [],
+        "agenda": _folder_agenda(conn, name) if kind == "space" and not tag else None,
     }
 
 
 @router.get("")
 def list_documents(request: Request, conn=Depends(get_db)):
-    """The Notebook home: generated folders (open projects, labels, Unfiled) and the library folders."""
-    import json as _json
-
+    """The Notebook home: one folder per space (Unfiled last) and the library folders."""
     folders = db.list_notebook_folders(conn)
     recent = db.recent_notebook_documents(conn)
-    report = db.get_app_meta(conn, "notebook_label_report")
     return templates.TemplateResponse(
         "notebook_home.html",
         {
@@ -112,7 +112,6 @@ def list_documents(request: Request, conn=Depends(get_db)):
             "active_tab": "notebook",
             "folders": folders,
             "recent_notes": recent,
-            "label_report": _json.loads(report) if report else [],
             "glossary_count": len(db.list_glossary_terms(conn)),
             "template_count": len(db.list_notebook_documents(conn, scope="templates")),
             "journal_count": sum(m["count"] for m in db.list_journal_years(conn)),
@@ -166,22 +165,6 @@ def open_journal_week(week: str = Form(...), conn=Depends(get_db)):
     return RedirectResponse(url=f"/notebook/{uid}", status_code=303)
 
 
-@router.get("/label-report")
-def label_report(request: Request, conn=Depends(get_db)):
-    import json as _json
-
-    raw = db.get_app_meta(conn, "notebook_label_report")
-    return templates.TemplateResponse(
-        "notebook_label_report_modal.html", {"request": request, "active_tab": "notebook", "report": _json.loads(raw) if raw else []}
-    )
-
-
-@router.post("/label-report/dismiss")
-def dismiss_label_report(conn=Depends(get_db)):
-    db.set_app_meta(conn, "notebook_label_report", "")
-    return RedirectResponse(url="/notebook", status_code=303)
-
-
 _NONE = "__none__"
 
 
@@ -214,7 +197,7 @@ def bulk_edit(
         row = db.get_notebook_document(conn, uid)
         if row is None:
             continue
-        if tag:  # a note has one tag: the new one replaces it, or "No tag" clears it
+        if tag:  # the bulk Tag field sets the note's one tag, or "No tag" clears them
             current = row.get("tags") or []
             row["tags"] = [] if tag == _NONE else tag_store.bulk_change(conn, "notebook", uid, current, [tag], [], single=True)
             if tag == _NONE:
@@ -289,7 +272,7 @@ def create_document(
         detail = [{"loc": ["body", name], "msg": msg} for name, msg in errors.items()]
         return JSONResponse({"detail": detail}, status_code=422)
     if item_tags_field == "1":
-        tags_labels = tag_store.labels_of(conn, item_tags[:1])
+        tags_labels = tag_store.labels_of(conn, item_tags)
     tags = [t for t in (tags_labels if isinstance(tags_labels, list) else [])]
     if isinstance(label, str) and label and label not in tags:
         tags.append(label)
@@ -302,7 +285,7 @@ def create_document(
         "tags": tags, "properties": properties,
     })
     if item_tags_field == "1":
-        tag_store.record(conn, "notebook", uid, item_tags[:1])
+        tag_store.record(conn, "notebook", uid, item_tags)
     if open_note == "1":
         return RedirectResponse(url=f"/notebook/{uid}", status_code=303)
     return respond(x_requested_with, f"/notebook/{uid}", status_code=201, uid=uid)
@@ -564,7 +547,7 @@ def document_page(uid: str, request: Request, back_to: str = "", back_label: str
     crumbs = [{"url": back_to, "name": back_label or "Notebook"}] if back_to else _NOTEBOOK_HOME_CRUMB
     if not back_to and not document["is_template"]:
         kind, name = db.notebook_folder_of(conn, uid)
-        if kind in ("project", "label"):
+        if kind == "space":
             crumbs = _NOTEBOOK_HOME_CRUMB + [{"url": "/notebook/folder?" + urlencode({"kind": kind, "name": name}), "name": name}]
     if document["is_template"] and not back_to:
         crumbs = [{"url": "/notebook/templates", "name": "Templates"}]
@@ -742,7 +725,7 @@ def update_document_properties(
         from . import dashboard as dashboard_router
 
         if item_tags_field == "1":
-            tags_labels = tag_store.labels_of(conn, item_tags[:1])
+            tags_labels = tag_store.labels_of(conn, item_tags)
 
         row["tags"] = dashboard_router._tags_list(dashboard_router._with_project(
             conn, ",".join(tags_labels if isinstance(tags_labels, list) else []),
@@ -760,7 +743,7 @@ def update_document_properties(
     row["updated_at"] = clock.now().isoformat()
     db.upsert_notebook_document(conn, row)
     if item_tags_field == "1" and not row["is_template"]:
-        tag_store.record(conn, "notebook", uid, item_tags[:1])
+        tag_store.record(conn, "notebook", uid, item_tags)
     return respond(x_requested_with, f"/notebook/{uid}")
 
 
@@ -942,9 +925,23 @@ def _field_edit_context(request: Request, conn, field: dict | None, form_action:
     }
 
 
+_NOTEBOOK_LISTS = {
+    "entry-types": ("Entry types", "Type", "/settings/notebook/entry-kinds/new", "New entry type"),
+    "subjects": ("Subjects", "Subject", "/settings/notebook/entry-subjects/new", "New subject"),
+    "fields": ("Frontmatter fields", "Field", "/settings/notebook/new", "New field"),
+}
+
+
 @field_settings_router.get("")
-def settings_notebook(request: Request, conn=Depends(get_db)):
-    """Notebook settings page: how a document page lays out its sidebar."""
+def settings_notebook(request: Request, view: str = "", conn=Depends(get_db)):
+    """Notebook settings page: how a document page lays out its sidebar; `?view=` opens one of its three lists."""
+    if view in _NOTEBOOK_LISTS:
+        title, column, add_url, add_label = _NOTEBOOK_LISTS[view]
+        return templates.TemplateResponse("settings_notebook_list.html", {
+            "request": request, "active_tab": "settings_notebook", "crumbs": [{"url": "/settings/notebook", "name": "Notebook"}], "view": view,
+            "list_title": title, "column_name": column, "add_url": add_url, "add_label": add_label,
+            "entry_kinds": db.list_entry_kinds(conn), "entry_subjects": db.list_entry_subjects(conn),
+            "fields": [{**f, "templates": []} for f in db.list_notebook_field_config(conn) if not (f["key"] == "author" and f.get("builtin"))]})
     return templates.TemplateResponse(
         "settings_notebook.html",
         {
@@ -952,6 +949,7 @@ def settings_notebook(request: Request, conn=Depends(get_db)):
             "active_tab": "settings_notebook",
             "crumbs": [{"url": "/settings", "name": "Settings"}],
             "title": "Notebook",
+            "default_rows_list": defaults.rows_for(conn, "notebook") + defaults.folder_rows(conn),
             "sidebar_layout": db.get_notebook_settings(conn)["sidebar_layout"],
             "citation_format": db.get_citation_format(conn),
             "journal_template": db.get_journal_template(conn),
@@ -996,7 +994,7 @@ def new_entry_kind_modal(request: Request, conn=Depends(get_db)):
 def edit_entry_kind_modal(request: Request, name: str, conn=Depends(get_db)):
     kind = next((k for k in db.list_entry_kinds(conn) if k["name"] == name), None)
     if kind is None:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/notebook?view=entry-types", status_code=303)
     return _kind_modal(request, conn, kind)
 
 
@@ -1017,7 +1015,7 @@ def save_entry_kind_form(
                                _s(match_mode) or None)
     if error:
         return _kind_error(error, x_requested_with)
-    return respond(x_requested_with, "/settings/notebook")
+    return respond(x_requested_with, "/settings/notebook?view=entry-types")
 
 
 @field_settings_router.post("/entry-kinds/delete")
@@ -1025,7 +1023,7 @@ def delete_entry_kind_form(name: str = Query(...), x_requested_with: str | None 
     error = db.delete_entry_kind(conn, name)
     if error:
         return _kind_error(error, x_requested_with)
-    return respond(x_requested_with, "/settings/notebook")
+    return respond(x_requested_with, "/settings/notebook?view=entry-types")
 
 
 def _subject_modal(request: Request, subject: dict | None):
@@ -1043,7 +1041,7 @@ def new_entry_subject_modal(request: Request):
 def edit_entry_subject_modal(request: Request, name: str, conn=Depends(get_db)):
     subject = next((s for s in db.list_entry_subjects(conn) if s["name"] == name), None)
     if subject is None:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/notebook?view=subjects", status_code=303)
     return _subject_modal(request, subject)
 
 
@@ -1053,7 +1051,7 @@ def save_entry_subject_form(original: str = Form(""), name: str = Form(""), colo
     error = db.save_entry_subject(conn, _s(original), name, color if color in COLORS else "teal")
     if error:
         return _kind_error(error, x_requested_with)
-    return respond(x_requested_with, "/settings/notebook")
+    return respond(x_requested_with, "/settings/notebook?view=subjects")
 
 
 @field_settings_router.post("/entry-subjects/delete")
@@ -1061,7 +1059,7 @@ def delete_entry_subject_form(name: str = Query(...), x_requested_with: str | No
     error = db.delete_entry_subject(conn, name)
     if error:
         return _kind_error(error, x_requested_with)
-    return respond(x_requested_with, "/settings/notebook")
+    return respond(x_requested_with, "/settings/notebook?view=subjects")
 
 
 frontmatter_settings_router = APIRouter(prefix="/settings/frontmatter", tags=["notebook-frontmatter-settings"])
@@ -1089,7 +1087,7 @@ def save_notebook_layout(sidebar_layout: str = Form("stacked"), conn=Depends(get
 def new_notebook_field_modal(request: Request, conn=Depends(get_db)):
     return templates.TemplateResponse(
         "notebook_field_edit_modal.html",
-        _field_edit_context(request, conn, None, "/settings/notebook"),
+        _field_edit_context(request, conn, None, "/settings/notebook?view=fields"),
     )
 
 
@@ -1097,7 +1095,7 @@ def new_notebook_field_modal(request: Request, conn=Depends(get_db)):
 def edit_notebook_field_modal(uid: str, request: Request, conn=Depends(get_db)):
     field = db.get_notebook_field_config(conn, uid)
     if field is None:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/notebook?view=fields", status_code=303)
     context = _field_edit_context(request, conn, field, f"/settings/notebook/{uid}/update")
     context["using_templates"] = db.list_templates_using_field(conn, field["key"])
     return templates.TemplateResponse("notebook_field_edit_modal.html", context)
@@ -1115,7 +1113,7 @@ def create_notebook_field(
 ):
     label = _s(label)
     if not label:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/notebook?view=fields", status_code=303)
     uid = db.upsert_notebook_field_config(
         conn,
         {
@@ -1125,7 +1123,7 @@ def create_notebook_field(
     )
     if type in db.NOTEBOOK_FIELD_OPTION_TYPES:
         db.set_notebook_field_options(conn, uid, _field_option_rows_from_form(option_value, option_color, option_icon))
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/notebook?view=fields", status_code=303)
 
 
 def _rebuild_builtin_options(existing_options: list[dict], colors: list[str], icons: list[str]) -> list[dict]:
@@ -1158,7 +1156,7 @@ def update_notebook_field(
 ):
     existing = db.get_notebook_field_config(conn, uid)
     if existing is None:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/notebook?view=fields", status_code=303)
     if existing["builtin"]:
         label = _s(label) or existing["label"]
         db.upsert_notebook_field_config(conn, {
@@ -1169,11 +1167,11 @@ def update_notebook_field(
             db.set_notebook_field_options(
                 conn, uid, _rebuild_builtin_options(existing["options"], option_color, option_icon)
             )
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/notebook?view=fields", status_code=303)
 
     label = _s(label)
     if not label:
-        return RedirectResponse(url="/settings/notebook", status_code=303)
+        return RedirectResponse(url="/settings/notebook?view=fields", status_code=303)
     db.upsert_notebook_field_config(
         conn,
         {
@@ -1190,7 +1188,7 @@ def update_notebook_field(
         # applies on read; this is that same rule's write-time mirror, so
         # a later switch back to Select doesn't resurrect stale options.
         db.set_notebook_field_options(conn, uid, [])
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/notebook?view=fields", status_code=303)
 
 
 @field_settings_router.post("/{uid}/delete")
@@ -1198,7 +1196,7 @@ def delete_notebook_field(uid: str, conn=Depends(get_db)):
     existing = db.get_notebook_field_config(conn, uid)
     if existing is not None and not existing["builtin"]:
         db.delete_notebook_field_config(conn, uid)
-    return RedirectResponse(url="/settings/notebook", status_code=303)
+    return RedirectResponse(url="/settings/notebook?view=fields", status_code=303)
 
 
 citations_router = APIRouter(prefix="/library", tags=["notebook-citations"])
@@ -1261,7 +1259,10 @@ def _citation_edit_context(request: Request, c: dict | None, form_action: str, r
         "delete_label": _citation_delete_label(conn, c) if conn else "",
         "editions": editions,
         "selected_edition": selected_edition if any(e["uid"] == selected_edition for e in editions) else (editions[0]["uid"] if editions else ""),
-        "edition_data": [{k: e[k] for k in ("uid", "edition", "year", "publisher", "place", "isbn", "doi", "url", "source", "file_label", "file_state", "display")} for e in editions],
+        "edition_data": [{k: e[k] for k in ("uid", "edition", "year", "publisher", "place", "isbn", "doi", "url", "source", "file_label", "file_state", "display", "language")} for e in editions],
+        "book_languages": [(code, name) for code, name, _ in book_speech.LANGUAGES],
+        "space_items": [{"uid": "", "name": "No space"}] + [{"uid": g["name"], "name": g["name"]} for g in (db.list_groups(conn) if conn else [])],
+        "keyword_items": db.keyword_options(conn) if conn else [],
         "request": request,
         "crumbs": _CITATIONS_CRUMB,
         "c": stored or c,
@@ -1318,8 +1319,7 @@ def citations_library(
     q: str = "",
     source: list[str] = Query([]),
     status: list[str] = Query([]),
-    tag: list[str] = Query([]),
-    shelf: list[str] = Query([]),
+    space: str = "",
     offset: int = 0,
     limit: int = 0,
     fragment: str = "",
@@ -1343,17 +1343,14 @@ def citations_library(
     sort2 = sort2 if sort2 in _CITATION_SORT_KEYS else "title"
     type_labels = dict(db.CITATION_TYPES)
     year_lo, year_hi = _resolve_citation_year_range(year_from, year_to)
-    tag = tag if isinstance(tag, list) else []
-    shelf = shelf if isinstance(shelf, list) else []
     terms = library_query.parse(q, dict(db.type_options(conn, db.CITATION_TYPES)))
     type = [*type, *terms["types"]]
     status = [*status, *terms["statuses"]]
-    tag = [*tag, *terms["tags"]]
-    shelf = [*shelf, *terms["shelves"]]
+    spaces = [*([space] if space else []), *terms["spaces"]]
     source = [*source, *terms["sources"]]
     year_lo = terms["year_lo"] if terms["year_lo"] is not None else year_lo
     year_hi = terms["year_hi"] if terms["year_hi"] is not None else year_hi
-    filters = dict(q=terms["text"], types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, tags=tag, shelves=shelf, sort=sort, sort2=sort2)
+    filters = dict(q=terms["text"], types=type, authors=author, year_lo=year_lo, year_hi=year_hi, sources=source, spaces=spaces, sort=sort, sort2=sort2)
     offset = max(0, offset)
     page = db.page_citations(conn, statuses=status, limit=limit, offset=offset, **filters)
     if not page["items"] and offset and page["total"]:  # past the end (fewer results than before): the last page instead
@@ -1371,7 +1368,7 @@ def citations_library(
         "total": page["total"], "offset": offset, "limit": limit,
         "current_query": request.url.query,
         "active_filter_count": (
-            len(type) + len(author) + len(source) + len(status) + len(tag) + len(shelf) + (1 if (year_from or year_to) else 0)
+            len(type) + len(author) + len(source) + len(status) + (1 if (year_from or year_to) else 0)
             + (1 if (sort != "status" or sort2 != "title") else 0)
         ),
     }
@@ -1464,7 +1461,7 @@ def citations_preview(
         conn, q=terms["text"], types=[t for t in [*type, *terms["types"]] if t], authors=author,
         year_lo=terms["year_lo"] if terms["year_lo"] is not None else year_lo,
         year_hi=terms["year_hi"] if terms["year_hi"] is not None else year_hi,
-        sources=[*source, *terms["sources"]], statuses=[s for s in [*status, *terms["statuses"]] if s], tags=terms["tags"], shelves=terms["shelves"],
+        sources=[*source, *terms["sources"]], statuses=[s for s in [*status, *terms["statuses"]] if s], spaces=terms["spaces"],
         sort=sort if sort in _CITATION_SORT_KEYS else "status", sort2=sort2 if sort2 in _CITATION_SORT_KEYS else "title", limit=40)
     items = page["items"]
     media_router.decorate(conn, items)
@@ -1581,8 +1578,8 @@ def edit_citation_modal(uid: str, request: Request, edition: str = "", conn=Depe
 
 
 _TRACKING_FORM_FIELDS = ("summary",)
-_CITATION_FORM_KEYS = ("type", "title", "year", "container_title", "doi", "url", "status", "score", "keywords", "crit_uid", "crit_value", "item_tags", "item_tags_field")
-_CITATION_TEXT_FIELDS = ("subtitle", "edition", "series", "volume", "issue", "pages", "publisher", "place", "isbn", "issn", "accessed", "institution", "degree", "editors", "note")
+_CITATION_FORM_KEYS = ("type", "title", "year", "container_title", "doi", "url", "status", "score", "keywords", "keywords_field", "crit_uid", "crit_value", "item_tags", "item_tags_field")
+_CITATION_TEXT_FIELDS = ("subtitle", "edition", "series", "volume", "issue", "pages", "publisher", "place", "isbn", "issn", "accessed", "institution", "degree", "editors", "note", "space")
 _EDITION_DETAILS = ("edition", "publisher", "place", "isbn", "doi", "url")
 
 
@@ -1596,6 +1593,8 @@ def _citation_row_from_form(uid: str, values: dict, author_family: list[str], au
             row[k] = values[k].strip()
     if isinstance(values.get("keywords"), str):
         row["keywords"] = [k.strip() for k in re.split(r"[,;\n]", values["keywords"]) if k.strip()]
+    elif isinstance(values.get("keywords"), list):
+        row["keywords"] = list(dict.fromkeys(k.strip() for k in values["keywords"] if k.strip()))
     if uid:
         row["uid"] = uid
     return row
@@ -1617,6 +1616,7 @@ def _write_edition(conn, citation_uid: str, edition_uid: str, edition: dict, sou
     has_file = file is not None and bool(getattr(file, "filename", ""))
     source = source if source in ("none", "link", "local") else "none"
     details = {k: _s(v) for k, v in edition.items()}
+    language = details.pop("language", None)
     if edition_uid:
         stored = db.get_edition(conn, edition_uid) or {}
         details = {**{k: stored.get(k) or "" for k in ("place", "doi")}, **details}
@@ -1625,6 +1625,8 @@ def _write_edition(conn, citation_uid: str, edition_uid: str, edition: dict, sou
     if not edition_uid and not (any(details.values()) or (source == "local" and has_file)):
         return None
     uid = db.save_edition(conn, citation_uid, details, edition_uid)
+    if language is not None:
+        db.set_edition_language(conn, uid, language)
     if source != "local":
         db.clear_edition_file(conn, uid)
         media_books.remove_files(conn, uid)
@@ -1685,11 +1687,12 @@ def _write_criteria(conn, citation_uid: str, uids, values) -> None:
     db.set_citation_ratings(conn, citation_uid, {u: media.from_scale(v, scale) for u, v in zip(uids, values) if u in known})
 
 
-def _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition):
+def _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition, ed_language=None):
     if not isinstance(ed_source, str) and not isinstance(edition_uid, str):
         return None
     return {"uid": _s(edition_uid), "source": _s(ed_source), "file": file, "delete": _s(delete_edition),
-            "details": {k: v for k, v in {"edition": ed_edition, "year": ed_year, "publisher": ed_publisher, "place": ed_place, "isbn": ed_isbn, "doi": ed_doi, "url": ed_url}.items() if v is not None}}
+            "details": {k: v for k, v in {"edition": ed_edition, "year": ed_year, "publisher": ed_publisher, "place": ed_place, "isbn": ed_isbn, "doi": ed_doi, "url": ed_url,
+                                          "language": ed_language}.items() if v is not None}}
 
 
 @citations_router.post("")
@@ -1724,10 +1727,12 @@ def create_citation(
     crit_value: list[str] = Form([]),
     item_tags: list[str] = Form([]),
     item_tags_field: str = Form(""),
-    keywords: str | None = Form(None),
+    keywords: list[str] = Form([]),
+    keywords_field: str = Form(""),
+    space: str | None = Form(None),
     edition_uid: str | None = Form(None),
     ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str | None = Form(None),
-    ed_isbn: str = Form(""), ed_doi: str | None = Form(None), ed_url: str = Form(""), ed_source: str | None = Form(None),
+    ed_isbn: str = Form(""), ed_doi: str | None = Form(None), ed_url: str = Form(""), ed_source: str | None = Form(None), ed_language: str | None = Form(None),
     file: UploadFile | None = File(None),
     delete_edition: str = Form(""),
     allow_duplicate: str = Form(""),
@@ -1740,7 +1745,9 @@ def create_citation(
     if not title:
         return RedirectResponse(url="/library", status_code=303)
     values = {k: v for k, v in locals().items() if k in (*_CITATION_FORM_KEYS, *_TRACKING_FORM_FIELDS, *_CITATION_TEXT_FIELDS)}
-    edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition)
+    if keywords_field != "1" and not keywords:  # a form that did not send the Keywords dropdown leaves them as they are
+        values.pop("keywords", None)
+    edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition, ed_language)
     found = _found_from_form(found_provider, found_id, found_cover_url, found_total, cover_file, cover_remove)
     return _write_citation(conn, "", values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form, found)
 
@@ -1778,10 +1785,12 @@ def update_citation(
     crit_value: list[str] = Form([]),
     item_tags: list[str] = Form([]),
     item_tags_field: str = Form(""),
-    keywords: str | None = Form(None),
+    keywords: list[str] = Form([]),
+    keywords_field: str = Form(""),
+    space: str | None = Form(None),
     edition_uid: str | None = Form(None),
     ed_edition: str = Form(""), ed_year: str = Form(""), ed_publisher: str = Form(""), ed_place: str | None = Form(None),
-    ed_isbn: str = Form(""), ed_doi: str | None = Form(None), ed_url: str = Form(""), ed_source: str | None = Form(None),
+    ed_isbn: str = Form(""), ed_doi: str | None = Form(None), ed_url: str = Form(""), ed_source: str | None = Form(None), ed_language: str | None = Form(None),
     file: UploadFile | None = File(None),
     delete_edition: str = Form(""),
     allow_duplicate: str = Form(""),
@@ -1797,7 +1806,9 @@ def update_citation(
         return RedirectResponse(url="/library", status_code=303)
     title = title.strip() or existing["title"]
     values = {k: v for k, v in locals().items() if k in (*_CITATION_FORM_KEYS, *_TRACKING_FORM_FIELDS, *_CITATION_TEXT_FIELDS)}
-    edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition)
+    if keywords_field != "1" and not keywords:  # a form that did not send the Keywords dropdown leaves them as they are
+        values.pop("keywords", None)
+    edition_form = _edition_form(edition_uid, ed_edition, ed_year, ed_publisher, ed_place, ed_isbn, ed_doi, ed_url, ed_source, file, delete_edition, ed_language)
     found = _found_from_form(found_provider, found_id, found_cover_url, found_total, cover_file, cover_remove)
     return _write_citation(conn, uid, values, author_family, author_given, _s(allow_duplicate), x_requested_with, edition_form, found)
 

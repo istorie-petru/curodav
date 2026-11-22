@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import text_input, number_input, switch_input %}
+{% block title %}New passwords{% endblock %}
+{% block content %}
+{# The one rule every Generate button follows. The sample is made from the fields as they stand and is never stored. #}
+{% call modal(kind="form", title="New passwords", size="medium", form='accounts-rule-form') %}
+<form method="post" action="/settings/accounts/generator" id="accounts-rule-form" class="accounts-generator" data-acc-generator autocomplete="off">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Example</label>
+            <div class="input-with-action accounts-generated">{{ text_input({'name': 'sample', 'value': sample.value, 'readonly': true, 'data-acc-generated': true, 'aria-label': 'Example password', 'form': 'none'}) }}
+                <button type="button" class="icon-btn" data-acc-regenerate title="Another example" aria-label="Another example">{{ icon('rotate-ccw', 'icon-sm') }}</button></div>
+            <div class="accounts-meter">
+                <span class="accounts-meter-bar"><span class="accounts-meter-fill" data-acc-meter-fill data-style="width: {{ [sample.bits, 128] | min / 1.28 }}%"></span></span>
+                <span class="accounts-meter-text" data-acc-meter-text>{{ sample.rating }} · {{ sample.bits }} bits</span>
+            </div>
+        </div>
+        <div class="field field-wide">
+            {% set ms_mode = 'single' %}{% set ms_name = 'mode' %}{% set ms_label = 'Kind' %}{% set ms_form_id = 'accounts-rule-form' %}
+            {% set ms_items = [{'uid': 'random', 'name': 'Random characters'}, {'uid': 'memorable', 'name': 'Memorable words'}] %}
+            {% set ms_selected = rule.mode %}{% set ms_wide = true %}{% set ms_remote = '' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field-grid field-wide" data-acc-mode="random"{% if rule.mode != 'random' %} hidden{% endif %}>
+            <div class="field">
+                {% set ms_mode = 'names' %}{% set ms_name = 'sets' %}{% set ms_label = 'Characters' %}{% set ms_form_id = 'accounts-rule-form' %}
+                {% set ms_items = set_items %}{% set ms_selected = rule.sets %}{% set ms_wide = false %}{% set ms_remote = '' %}
+                {% include '_widget_list_multiselect.html' %}
+            </div>
+            <div class="field"><label>Leave out</label>{{ text_input({'name': 'exclude', 'value': rule.exclude}) }}</div>
+            <div class="field"><label>Length</label>{{ number_input({'name': 'length', 'value': rule.length, 'min': 8, 'max': 128}) }}</div>
+        </div>
+        <div class="field-grid field-wide" data-acc-mode="memorable"{% if rule.mode != 'memorable' %} hidden{% endif %}>
+            <div class="field"><label>Words</label>{{ number_input({'name': 'words', 'value': rule.words, 'min': 3, 'max': 10}) }}</div>
+            <div class="field"><label>Between words</label>{{ text_input({'name': 'separator', 'value': rule.separator, 'maxlength': 3}) }}</div>
+            <div class="field accounts-switch-field"><label>Capital first letters</label>{{ switch_input({'name': 'capitalize', 'value': '1', 'checked': rule.capitalize}) }}</div>
+            <div class="field accounts-switch-field"><label>Add a number</label>{{ switch_input({'name': 'number', 'value': '1', 'checked': rule.number}) }}</div>
+        </div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

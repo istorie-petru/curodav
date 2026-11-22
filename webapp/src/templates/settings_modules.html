@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Modules - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_section_row.html" import section_row %}
+{{ page_header_narrow("Modules", "puzzle") }}
+<div class="settings-stack">
+{% call section_row('') %}Apps you can switch on or off{% endcall %}
+<div class="card">
+    {% for m in module_rows %}
+    <form class="settings-field-row" method="post" action="/settings/modules/{{ m.key }}" id="module-{{ m.key }}-form">
+        <span class="settings-field-label">{{ icon(m.icon, 'icon-sm') }} {{ m.title }}
+            <span class="settings-field-hint">{{ m.description }}{% if m.forced %}. Kept on by the CC_MODULES setting of this run{% endif %}</span>
+        </span>
+        <span class="spacer"></span>
+        {% set ms_name = 'enabled' %}
+        {% set ms_mode = 'single' %}
+        {% set ms_label = m.title %}
+        {% set ms_items = [{'uid': '1', 'name': 'On'}, {'uid': '0', 'name': 'Off'}] %}
+        {% set ms_selected = '1' if m.on else '0' %}
+        {% set ms_autosubmit = true %}
+        {% set ms_bare = true %}
+        {% set ms_form_id = 'module-' ~ m.key ~ '-form' %}
+        {% include "_widget_list_multiselect.html" %}
+    </form>
+    {% endfor %}
+</div>
+</div>
+{% endblock %}

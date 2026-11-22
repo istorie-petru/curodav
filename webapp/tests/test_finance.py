@@ -119,7 +119,7 @@ def test_invalid_transactions_report_the_field(conn, extra, field):
 
 def _tags(conn, *names):
     for n in names:
-        tags.add_finance_tag(conn, n, "green", "tag")
+        tags.add_tag(conn, n, "Personal", "green", "tag")
 
 
 def test_tags_are_stored_with_the_transaction_as_tag_links(conn):
@@ -129,7 +129,7 @@ def test_tags_are_stored_with_the_transaction_as_tag_links(conn):
     row = finance.get_transaction(conn, uid)
     assert "label" not in row and row["tags"] == ["bus", "transport"]  # a tag is never made on the fly
     assert tags.tags_for_object(conn, "transaction", uid) == ["bus", "transport"]
-    assert tags.get_tag(conn, "bus")["label_name"] == "Finance"
+    assert tags.get_tag(conn, "bus")["space"] == "Personal"
 
 
 def test_tag_pills_use_the_tags_own_look(conn):
@@ -255,7 +255,7 @@ def test_dates_and_types_are_shortened_for_the_table():
 
 def test_accounts_live_in_settings_and_the_transactions_page_does_not_link_to_them(conn):
     from src.routers import settings as settings_router
-    assert "/settings/finance-accounts" in {c["url"] for c in settings_router.HUB_CATEGORIES}
+    assert "/settings/finance" in {c["url"] for c in settings_router.HUB_CATEGORIES}
     body = router.transactions(_request(), conn=conn).body.decode()
     assert "/finance/accounts" not in body and 'href="/finance/transactions/new"' in body and "Import CSV" not in body
 

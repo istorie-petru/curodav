@@ -1,0 +1,104 @@
+{% set page_add = ({'href': '/accounts/entry/new' ~ ('?space=' ~ (space|urlencode) if space else ''), 'label': 'New entry'} if unlocked else ({'href': '/accounts/unlock', 'label': 'Unlock'} if exists else {'href': '/accounts/create', 'label': 'Create the vault'})) %}
+{% extends "base.html" %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_empty_state.html" import empty_state %}
+{% from "_inputs.html" import search_input, checkbox_input %}
+{% from "_action_menu.html" import action_menu with context %}
+{% block title %}Accounts{% endblock %}
+{% block main_class %}main-full-width notebook-main accounts-page{% endblock %}
+{% block content %}
+{# The Accounts vault (features/accounts-vault.md): entries in the page, spaces and password health in the right sidebar.
+   Values are fetched one at a time by accounts.js. #}
+{% call page_header_narrow("Accounts", "lock", sidebar_toggle=unlocked) %}
+{% endcall %}
+{% include "_flash.html" %}
+{% if notice %}<div class="settings-hint settings-hint-accent" data-dm-flash="note">{{ notice }}</div>{% endif %}
+{% if not exists %}
+<div class="card">{% call empty_state('No vault yet', 'lock') %}
+    {% if safe %}<a class="btn primary" href="/accounts/create" data-modal>{{ icon('plus', 'icon-sm') }} Create the vault</a>{% else %}<p class="modal-sentence">Open Curodav over HTTPS to create the vault.</p>{% endif %}
+{% endcall %}</div>
+{% elif not unlocked %}
+<div class="card">{% call empty_state('The vault is locked', 'lock') %}
+    {% if safe %}<a class="btn primary" href="/accounts/unlock" data-modal>{{ icon('unlock', 'icon-sm') }} Unlock</a>{% else %}<p class="modal-sentence">Open Curodav over HTTPS to unlock the vault.</p>{% endif %}
+{% endcall %}</div>
+{% else %}
+<div class="accounts-main" data-accounts-unlocked>
+    <div class="accounts-list-head">
+        {% if entries %}{{ checkbox_input({'class': 'select-all', 'data-acc-select-all': true, 'aria-label': 'Select all entries', 'autocomplete': 'off'}) }}{% endif %}
+        <h2 class="sec-heading">{{ heading }}</h2>
+        <div class="accounts-bulk-bar" id="accounts-bulk-bar" hidden>
+            <span class="accounts-bulk-count" id="accounts-bulk-count"></span>
+            {% if view != 'trash' %}<a id="accounts-bulk-edit" class="btn ghost btn-sm" href="/accounts/bulk" data-modal title="Move or change the selected entries" aria-label="Move or change the selected entries">{{ icon('edit', 'icon-sm') }} Change</a>{% endif %}
+            {% if view == 'trash' %}<form method="post" action="/accounts/bulk/restore" class="form-inline" data-acc-bulk-form><input type="hidden" name="uuids" value=""><button type="submit" class="btn ghost btn-sm">{{ icon('rotate-ccw', 'icon-sm') }} Restore</button></form>{% endif %}
+            <form method="post" action="/accounts/bulk/delete" class="form-inline" data-acc-bulk-form><input type="hidden" name="uuids" value=""><button type="submit" class="btn ghost btn-sm danger"{% if view == 'trash' %} data-confirm-sheet="Delete the selected entries for good? This cannot be undone."{% endif %}>{{ icon('trash', 'icon-sm') }} {{ 'Delete' if view == 'trash' else 'Bin' }}</button></form>
+            <button type="button" class="btn ghost btn-sm" id="accounts-bulk-clear" title="Clear the selection" aria-label="Clear the selection">{{ icon('x', 'icon-sm') }}</button>
+        </div>
+        {% if health or space is not none or view or q or tag %}<a class="btn ghost btn-sm" href="/accounts">{{ icon('x', 'icon-sm') }} Show all</a>{% endif %}
+        <span class="spacer"></span>
+        {% if view == 'trash' and entries %}<form method="post" action="/accounts/trash/empty" class="form-inline"><button type="submit" class="btn ghost btn-sm" data-confirm-sheet="Delete everything in the recycle bin for good? This cannot be undone.">{{ icon('trash', 'icon-sm') }} Empty the bin</button></form>{% endif %}
+    </div>
+    {% if entries %}
+    <div class="card contact-list accounts-list">{% for e in entries %}{{ entry_row(e) }}{% endfor %}</div>
+    {% else %}
+    <div class="card">{{ empty_state('Nothing in the recycle bin' if view == 'trash' else ('Nothing to fix here' if health else ('No matches' if q or tag else 'No entries here yet')), 'shield' if health else 'key') }}</div>
+    {% endif %}
+</div>
+<aside class="notebook-sidebar accounts-sidebar" aria-label="Search, spaces and password health">
+    <section class="accounts-side-tools">
+        <form method="get" action="/accounts" class="accounts-search" role="search">
+            {% if space is not none %}<input type="hidden" name="space" value="{{ space }}">{% endif %}
+            {{ search_input({'name': 'q', 'value': q, 'aria-label': 'Search accounts', 'autocomplete': 'off'}) }}
+        </form>
+        {{ action_menu([
+            {'label': 'Import', 'icon': 'upload', 'href': '/accounts/import', 'modal': true},
+            {'label': 'Export', 'icon': 'download', 'href': '/accounts/export', 'modal': true},
+            {'label': 'Settings', 'icon': 'settings', 'href': '/settings/accounts'},
+            {'label': 'Lock the vault', 'icon': 'lock', 'form_action': '/accounts/lock'},
+        ], aria_label='More vault actions') }}
+    </section>
+    <section class="accounts-side-section">
+        <h2 class="accounts-side-title">Spaces</h2>
+        <a class="accounts-side-row{% if space is none and not view and not health %} active{% endif %}" href="/accounts">{{ icon('key', 'icon-sm') }}<span class="accounts-side-name">All entries</span><span class="accounts-count">{{ total }}</span></a>
+        {% for sp in spaces %}
+        <a class="accounts-side-row{% if space == sp.name %} active{% endif %}" href="/accounts?space={{ sp.name|urlencode }}" data-acc-drop="{{ sp.name }}"><span class="sidebar-group-glyph" data-style="color: var(--cal-text-{{ sp.color }})">{{ icon(sp.icon, 'icon-sm') }}</span><span>{{ sp.name }}</span><span class="accounts-count">{{ sp.count or '' }}</span></a>
+        {% endfor %}
+        <a class="accounts-side-row{% if space == no_space %} active{% endif %}" href="/accounts?space={{ no_space }}" data-acc-drop="">{{ icon('inbox', 'icon-sm') }}<span class="accounts-side-name">No space</span><span class="accounts-count">{{ no_space_count or '' }}</span></a>
+        <a class="accounts-side-row{% if view == 'trash' %} active{% endif %}" href="/accounts?view=trash">{{ icon('trash', 'icon-sm') }}<span class="accounts-side-name">Recycle bin</span><span class="accounts-count">{{ trash_count or '' }}</span></a>
+    </section>
+    <section class="accounts-side-section">
+        <h2 class="accounts-side-title">Password health</h2>
+        {% set _pct = ((report.fine / report.total * 100) | round | int) if report.total else 100 %}
+        <div class="accounts-health-score">
+            <span class="accounts-health-number">{{ _pct }}%</span>
+            <span class="accounts-health-text">{{ report.fine }} of {{ report.total }} fine</span>
+        </div>
+        <div class="accounts-health-bar" role="img" aria-label="{{ _pct }} percent of passwords are fine"><span class="accounts-health-fill tone-{{ 'good' if _pct >= 80 else ('fair' if _pct >= 50 else 'poor') }}" data-style="width: {{ _pct }}%"></span></div>
+        {% for key, label in health_items %}
+        <a class="accounts-side-row{% if health == key %} active{% endif %}{% if not report[key] %} is-zero{% endif %}" href="/accounts?health={{ key }}">{{ icon('alert-triangle' if report[key] else 'check-circle', 'icon-sm') }}<span class="accounts-side-name">{{ label }}</span><span class="accounts-count">{{ report[key]|length }}</span></a>
+        {% endfor %}
+    </section>
+</aside>
+{% endif %}
+{% endblock %}
+{% macro entry_row(e) %}
+{% set t = type_map.get(e.type) or {'icon': 'key', 'name': 'Login'} %}
+<div class="contact-row-wrap accounts-row" data-uuid="{{ e.uuid }}" draggable="true">
+    {{ checkbox_input({'class': 'row-select', 'data-uuid': e.uuid, 'aria-label': 'Select ' ~ e.title, 'autocomplete': 'off'}) }}
+    <a class="contact-row" href="/accounts/entry/{{ e.uuid|urlencode }}" data-modal>
+        <span class="notebook-row-icon">{{ icon(t.icon, 'icon-sm') }}</span>
+        <span class="contact-row-main">
+            <span class="contact-row-name">{{ e.title }}</span>
+            <span class="contact-row-sub">{{ e.username }}{% if e.username and e.url %} · {% endif %}{{ e.url | replace('https://', '') | replace('http://', '') }}</span>
+        </span>
+        {% for tg in e.tags[:3] %}<span class="cell-tag tag-gray">{{ tg }}</span>{% endfor %}
+        {% if e.expired %}<span class="cell-tag tag-red">Expired</span>{% endif %}
+    </a>
+    {% if view == 'trash' %}
+    <form method="post" action="/accounts/entry/{{ e.uuid|urlencode }}/restore" class="form-inline"><button type="submit" class="icon-btn" title="Restore" aria-label="Restore {{ e.title }}">{{ icon('rotate-ccw', 'icon-sm') }}</button></form>
+    {% else %}
+    {% if e.username %}<button type="button" class="icon-btn" data-acc-copy data-uuid="{{ e.uuid }}" data-field="UserName" title="Copy user name" aria-label="Copy the user name of {{ e.title }}">{{ icon('user', 'icon-sm') }}</button>{% endif %}
+    <button type="button" class="icon-btn" data-acc-copy data-uuid="{{ e.uuid }}" data-field="Password" title="Copy password" aria-label="Copy the password of {{ e.title }}">{{ icon('copy', 'icon-sm') }}</button>
+    {% endif %}
+</div>
+{% endmacro %}
+{% block extra_scripts %}<script defer src="{{ static_url('notebook_sidebar.js') }}"></script><script defer src="{{ static_url('accounts.js') }}"></script>{% endblock %}

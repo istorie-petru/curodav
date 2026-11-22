@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Calendar - Settings{% endblock %}
+{% block content %}
+{% from "_page_header_narrow.html" import page_header_narrow with context %}
+{% from "_section_row.html" import section_row %}
+{% from "_settings_rows.html" import select_row, default_rows, link_row %}
+{{ page_header_narrow("Calendar", "calendar") }}
+<div class="settings-stack">
+{% call section_row('') %}Views{% endcall %}
+<div class="card">
+    {{ default_rows(default_rows_list[:1]) }}
+    {{ select_row('/settings/four-week-position', 'four-week-position-form', 'position', '4-week view: current week', 'Which row of the 4-week view holds the current week', four_week_items, four_week_position) }}
+    {{ select_row('/settings/hide-sleep-hours', 'hide-sleep-hours-form', 'enabled', 'Hide sleep hours in the planner', 'Removes the sleep block\'s hours from the week grid instead of only shading them', hide_sleep_items, hide_sleep) }}
+</div>
+{% call section_row('') %}New events{% endcall %}
+<div class="card">{{ default_rows(default_rows_list[1:]) }}</div>
+{% call section_row('') %}Lists{% endcall %}
+<div class="card">
+    {{ link_row('/settings/calendar?view=holidays', 'Holidays', 'Dates the calendar and recurrences skip') }}
+    {{ link_row('/settings/calendar?view=time-blocks', 'Sleep and leisure hours', 'Hatched in the week grid') }}
+</div>
+</div>
+{% endblock %}

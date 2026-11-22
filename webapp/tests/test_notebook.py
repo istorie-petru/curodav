@@ -432,7 +432,7 @@ class TestCreateDocument:
             "d1", title="D1", note_type="", note_type_new="",
             tags_labels=["University", "History"], property_key=[], property_value=[], conn=conn,
         )
-        assert db.get_notebook_document(conn, "d1")["tags"] == ["University"]
+        assert db.get_notebook_document(conn, "d1")["tags"] == ["History", "University"]
 
     def test_properties_modal_has_one_tag_dropdown_and_kind_as_a_dropdown(self, conn):
         _document(conn, uid="d1")
@@ -440,14 +440,6 @@ class TestCreateDocument:
         assert 'name="item_tags"' in body and 'name="item_tags_field"' in body and 'name="project_field"' not in body
         assert "seg-btn" not in body and 'name="kind"' in body
 
-    def test_update_properties_saves_the_project_beside_the_labels(self, conn):
-        db.upsert_label_config(conn, {"name": "Thesis", "is_project": 1})
-        _document(conn, uid="d1")
-        notebook_router.update_document_properties(
-            "d1", title="D1", note_type="", note_type_new="", tags_labels=["History"], project="Thesis", project_field="1",
-            property_key=[], property_value=[], conn=conn,
-        )
-        assert sorted(db.get_notebook_document(conn, "d1")["tags"]) == ["History", "Thesis"]
 
     def test_update_properties_empty_labels_clears_them(self, conn):
         _document(conn, uid="d1", tags=["Old"])

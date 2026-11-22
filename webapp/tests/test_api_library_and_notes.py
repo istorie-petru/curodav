@@ -78,7 +78,7 @@ def _note(conn, uid="n1"):
 
 def test_a_note_is_created_from_markdown_with_a_tag(conn):
     conn.execute("INSERT INTO label_config (name) VALUES ('Philosophy')")
-    tags.add_default_tag(conn, "Philosophy")
+    tags.add_tag(conn, "Philosophy")
     result = _call(conn, "create_note", title="Duty", tag="Philosophy", markdown="# Duty\n\nActs from duty.")["structuredContent"]
     note = api_service.get_note(conn, result["uid"])
     assert note["title"] == "Duty" and note["tags"] == ["Philosophy"] and "Acts from duty." in note["markdown"]

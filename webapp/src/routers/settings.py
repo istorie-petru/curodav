@@ -89,6 +89,7 @@ from ..deps import (
     templates,
     wants_json,
 )
+from . import defaults
 from .dashboard import DISPLAY_NAME_KEY
 from .export import _redirect_with_error, _redirect_with_note, export_context
 from .tasks import TASK_AUTO_ARCHIVE_DAYS_KEY
@@ -98,9 +99,10 @@ logger = get_logger(__name__)
 
 HUB_DESCRIPTIONS = {
     "Account": "Profile picture, nickname, login and security, notifications",
-    "Preferences": "Display preferences, theme and header banner",
-    "Organise": "Shelves, tags, spaces and projects",
-    "Modules": "Notebook layout and entry types, finance accounts",
+    "Preferences": "Time zone, week start, time format, theme and header banner",
+    "Modules": "Switch Notebook, Library, Finance, University and Accounts on or off",
+    "Apps": "The settings of each app: Calendar, Tasks and every module that is on",
+    "Organise": "Tags and spaces",
     "System": "Data and maintenance, backups, published lists, logs, API access",
 }
 def _hub_groups() -> list[dict]:
@@ -110,8 +112,13 @@ def _hub_groups() -> list[dict]:
     ]
 
 
-HUB_GROUPS = _hub_groups()
-HUB_CATEGORIES = [{"url": v["url"], "name": v["name"], "group": g["name"]} for g in HUB_GROUPS for v in g["views"]]
+def __getattr__(name: str):
+    """HUB_GROUPS and HUB_CATEGORIES follow the modules that are on, so they are worked out when asked for."""
+    if name == "HUB_GROUPS":
+        return _hub_groups()
+    if name == "HUB_CATEGORIES":
+        return [{"url": v["url"], "name": v["name"], "group": g["name"]} for g in _hub_groups() for v in g["views"]]
+    raise AttributeError(name)
 
 # Breadcrumb roots shared by every settings_*.html page below.
 _ROOT_CRUMB = [{"url": "/settings", "name": "Settings"}]
@@ -189,21 +196,34 @@ def settings_general(request: Request, conn=Depends(get_db)):
             "current_timezone": db.get_app_meta(conn, config.TIMEZONE_KEY) or "",
             "timezone_options": [{"uid": "", "name": "System default"}]
             + [{"uid": z, "name": z} for z in config.TIMEZONE_CHOICES],
-            "module_rows": [{"key": m.key, "title": m.title, "description": m.description, "on": modules.is_enabled(m.key), "forced": m.key in modules.forced_keys()}
-                            for m in modules.MODULES.values()],
-            "current_default_currency": finance.default_currency(conn),
-            "currency_options": [{"uid": "", "name": "None"}] + [{"uid": c, "name": c} for c in finance_stats.CURRENCIES],
         },
     )
 
 
+@router.get("/settings/modules")
+def settings_modules(request: Request):
+    return templates.TemplateResponse("settings_modules.html", {
+        "request": request, "active_tab": "settings_modules", "crumbs": _ROOT_CRUMB, "title": "Modules",
+        "module_rows": [{"key": m.key, "title": m.title, "description": m.description, "icon": m.icon, "on": modules.is_enabled(m.key),
+                         "forced": m.key in modules.forced_keys()} for m in modules.MODULES.values()]})
+
+
 @router.post("/settings/modules/{key}")
 def set_module(key: str, enabled: str = Form("0"), conn=Depends(get_db)):
-    """Turns a module on or off from the General settings page."""
+    """Turns a module on or off. Its data is kept while it is off."""
     if key not in modules.MODULES:
         raise HTTPException(404, "No such module")
     modules.set_enabled(conn, key, enabled == "1")
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/modules", status_code=303)
+
+
+@router.get("/settings/tasks")
+def settings_tasks(request: Request, conn=Depends(get_db)):
+    return templates.TemplateResponse("settings_tasks.html", {
+        "request": request, "active_tab": "settings_tasks", "crumbs": _ROOT_CRUMB, "title": "Tasks",
+        "default_rows_list": defaults.rows_for(conn, "tasks"),
+        "auto_archive_days": db.get_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY) or "0",
+        "days_items": [{"uid": k, "name": n} for k, n in DAYS_CHOICES]})
 
 
 @router.get("/settings/logs")
@@ -239,6 +259,7 @@ def settings_notifications(request: Request, conn=Depends(get_db)):
             "push_types_on": reminders.enabled_types(conn),
             "push_digest_time": reminders.digest_time_str(conn),
             "push_contact_email": push.contact_email(conn),
+            "quiet_rows": defaults.rows_for(conn, "notifications"),
         },
     )
 
@@ -722,7 +743,7 @@ def set_four_week_position(position: str = Form("1"), conn=Depends(get_db)):
         Read back by routers/calendar.py's four_week_view.
     """
     db.set_app_meta(conn, FOUR_WEEK_POSITION_KEY, position if position in ("1", "2", "3", "4") else "1")
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/calendar", status_code=303)
 
 
 @router.post("/settings/terminology")
@@ -763,7 +784,7 @@ def set_timezone(timezone: str = Form(""), conn=Depends(get_db)):
 @router.post("/settings/default-currency")
 def set_default_currency(currency: str = Form(""), conn=Depends(get_db)):
     db.set_app_meta(conn, finance.DEFAULT_CURRENCY_KEY, currency if currency in finance_stats.CURRENCIES else "")
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/finance", status_code=303)
 
 
 @router.post("/settings/notifications")
@@ -828,7 +849,7 @@ def set_hide_sleep_hours(enabled: str = Form(""), conn=Depends(get_db)):
         regardless of this setting (direct decision).
     """
     db.set_app_meta(conn, HIDE_SLEEP_HOURS_KEY, "1" if enabled == "1" else "")
-    return RedirectResponse(url="/settings/general", status_code=303)
+    return RedirectResponse(url="/settings/calendar", status_code=303)
 
 
 @router.post("/settings/flair-languages")
@@ -866,6 +887,7 @@ def settings_appearance(request: Request, conn=Depends(get_db)):
             "current_edit_mode": db.get_app_meta(conn, EDIT_MODE_KEY) == "1",
             "current_accent_color": db.get_app_meta(conn, ACCENT_COLOR_KEY) or "blue",
             "accent_presets": ACCENT_PRESETS,
+            "accent_items": [{"uid": p["key"], "name": p["name"]} for p in ACCENT_PRESETS],
             "current_page_header_banner": db.get_page_banner(conn, PAGE_HEADER_BANNER_SCOPE),
             "flairs_configured_count": len({i for i in _known_flair_ids() if flairs.flair_image_url(i)}),
             "flairs_total_count": len(_known_flair_ids()),
@@ -1395,6 +1417,7 @@ def settings_data_maintenance(request: Request, conn=Depends(get_db)):
         "title": "Data & Maintenance",
         "conflicts": db.list_sync_conflicts(conn),
         "sync_gc_days_choices": _choices_with_stored_value(SYNC_GC_DAYS_CHOICES, sync_gc_days),
+        "retention_items": [{"uid": v, "name": n} for v, n in _choices_with_stored_value(SYNC_GC_DAYS_CHOICES, sync_gc_days)],
         "completed_task_count": completed_task_count,
         "task_auto_archive_days": auto_archive_days,
         "days_choices": _choices_with_stored_value(DAYS_CHOICES, auto_archive_days),
@@ -1522,7 +1545,7 @@ def set_task_auto_archive(days: str = Form("0"), conn=Depends(get_db)):
     than silently deleting tasks on some unintended schedule."""
     valid = {choice for choice, _ in DAYS_CHOICES}
     db.set_app_meta(conn, TASK_AUTO_ARCHIVE_DAYS_KEY, days if days in valid else "0")
-    return RedirectResponse(url="/settings/data-maintenance", status_code=303)
+    return RedirectResponse(url="/settings/tasks", status_code=303)
 
 
 @router.post("/settings/purge-completed")

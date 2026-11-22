@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import password_input, upload_input %}
+{% block title %}Change the master password{% endblock %}
+{% block content %}
+{% call modal(kind="form", title="Change the master password", size="small", form='accounts-master-form', save_icon='lock') %}
+<form method="post" action="/settings/accounts/master" id="accounts-master-form" enctype="multipart/form-data">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Current master password</label>{{ password_input({'name': 'current', 'autocomplete': 'current-password', 'required': true, 'autofocus': true}) }}</div>
+        <div class="field field-wide"><label>Current key file</label>{{ upload_input('current_key', form='accounts-master-form', label='Choose a key file') }}</div>
+        <div class="field field-wide"><label>New master password</label>{{ password_input({'name': 'password', 'autocomplete': 'new-password', 'required': true, 'minlength': min_length}) }}</div>
+        <div class="field field-wide"><label>Repeat it</label>{{ password_input({'name': 'confirm', 'autocomplete': 'new-password', 'required': true}) }}</div>
+        <div class="field field-wide"><label>New key file</label>{{ upload_input('key_file', form='accounts-master-form', label='Choose a key file') }}</div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

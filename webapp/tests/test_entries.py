@@ -126,8 +126,7 @@ def _note(conn, uid, title, tags=(), note_type=""):
                                        "tags": list(tags), "created_at": "2026-10-01", "updated_at": "2026-10-01"})
 
 
-def test_the_picker_offers_entries_first_then_same_project_same_label_and_the_rest(conn):
-    db.upsert_label_config(conn, {"name": "Thesis", "is_project": True})
+def test_the_picker_offers_entries_first_then_same_tag_same_space_and_the_rest(conn):
     _note(conn, "me", "Current", ["Thesis", "Reading"])
     _note(conn, "a", "Zeta in project", ["Thesis"])
     _note(conn, "b", "Beta label", ["Reading"])
@@ -135,7 +134,7 @@ def test_the_picker_offers_entries_first_then_same_project_same_label_and_the_re
     db.upsert_glossary_term(conn, {"term": "Alphabet", "definition": "x", "kind": "Term"})
     found = db.search_link_targets(conn, "", exclude_uid="me")
     assert [(i["group"], i["title"]) for i in found] == [
-        ("Entries", "Alphabet"), ("Same project", "Zeta in project"), ("Same label", "Beta label"), ("Notes", "Alpha other")]
+        ("Entries", "Alphabet"), ("Same tag", "Beta label"), ("Same tag", "Zeta in project"), ("Notes", "Alpha other")]
 
 
 def test_the_picker_narrows_by_typing_and_finds_entries_by_alternate_name(conn):
@@ -239,6 +238,6 @@ def test_the_settings_page_lists_the_types_and_the_modal_opens(conn):
     from src.routers import notebook as router
 
     db.save_entry_kind(conn, "", "Person", "user", "blue", [], ["Born"])
-    assert "Person" in router.settings_notebook(_request("/settings/notebook"), conn=conn).body.decode()
+    assert "Person" in router.settings_notebook(_request("/settings/notebook"), view="entry-types", conn=conn).body.decode()
     modal = router.edit_entry_kind_modal(_request(), name="Person", conn=conn).body.decode()
     assert 'value="Born"' in modal and "readonly" in modal

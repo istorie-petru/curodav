@@ -138,30 +138,12 @@ class TestLabelsAndProjectsBulkEditFields:
     def _label(self, conn, name, **extra):
         db.upsert_label_config(conn, {"name": name, "color": "blue", "created_at": _now(), **extra})
 
-    def test_sets_a_deadline_on_plain_labels(self, conn):
-        from src.routers import labels as labels_router
-
-        self._label(conn, "L")
-        labels_router.bulk_edit_labels(uids=["L"], end_date="2027-02-01", conn=conn)
-        cfg = db.get_label_config(conn, "L")
-        assert cfg["has_deadline"] and cfg["deadline_date"] == "2027-02-01"
-
-    def test_rejects_a_bad_date(self, conn):
-        import pytest
-        from fastapi import HTTPException
-        from src.routers import labels as labels_router
-
-        with pytest.raises(HTTPException):
-            labels_router.bulk_edit_labels(uids=["P"], end_date="soon", conn=conn)
-
-    def test_sets_and_clears_the_group(self, conn):
+    def test_sets_the_space(self, conn):
         from src.routers import labels as labels_router
 
         self._label(conn, "A")
         labels_router.bulk_edit_labels(uids=["A"], label_group="Uni", conn=conn)
         assert db.get_label_config(conn, "A")["label_group"] == "Uni"
-        labels_router.bulk_edit_labels(uids=["A"], label_group="__none__", conn=conn)
-        assert not db.get_label_config(conn, "A")["label_group"]
 
     def test_archives_and_restores(self, conn):
         from src.routers import labels as labels_router
@@ -172,9 +154,9 @@ class TestLabelsAndProjectsBulkEditFields:
         labels_router.bulk_edit_labels(uids=["A"], archive="restore", conn=conn)
         assert not db.get_label_config(conn, "A")["archived_at"]
 
-    def test_the_modal_offers_a_deadline(self, conn):
+    def test_the_modal_offers_the_space_and_no_deadline(self, conn):
         from src.routers import labels as labels_router
 
         self._label(conn, "L")
-        label = labels_router.bulk_edit_modal("L", _request("/settings/labels/bulk-edit-modal"), conn=conn).body.decode()
-        assert "Deadline" in label and "End date" not in label
+        body = labels_router.bulk_edit_modal("L", _request("/settings/labels/bulk-edit-modal"), conn=conn).body.decode()
+        assert "Space" in body and "Deadline" not in body

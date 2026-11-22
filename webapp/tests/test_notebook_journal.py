@@ -65,7 +65,7 @@ def test_entries_sit_in_year_folders_and_not_in_label_folders(conn):
         db.create_journal_entry(conn, week)
     assert db.list_journal_years(conn) == [{"name": "2026", "count": 2}, {"name": "2025", "count": 1}]
     folders = db.list_notebook_folders(conn)
-    assert folders["projects"] == [] and folders["labels"] == []
+    assert folders["spaces"] == []
 
 
 def test_a_year_folder_lists_its_weeks_newest_first_with_a_strip_of_every_week(conn):

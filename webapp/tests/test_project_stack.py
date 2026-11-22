@@ -154,7 +154,7 @@ class TestArchiveAction:
         db.upsert_label_config(conn, {"name": "Trip", "is_project": 1, "has_deadline": 1, "deadline_date": "2020-01-01", "created_at": _now()})
         resp = label_pages.archive_label("Trip", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/labels/Trip"
+        assert resp.headers["location"] == "/settings/labels"
         cfg = db.effective_label_config(conn, "Trip")
         assert cfg["archived_at"] is not None
         assert db.project_status(conn, cfg) == "Archived"

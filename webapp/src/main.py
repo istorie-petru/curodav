@@ -13,7 +13,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +22,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.types import Scope
 
 from .log import get_logger
-from . import banner_files, db, perf, reminders, sync, tags
+from . import banner_files, db, modules, perf, reminders, sync, tags
 from .auth import AuthMiddleware, CSRFMiddleware
 from .caldav_bridge import CalDavBridge
 from .config import apply_persisted_radicale_overrides, apply_persisted_timezone, load_settings, uses_default_radicale_credentials
@@ -272,9 +272,9 @@ def create_app() -> FastAPI:
             return templates.TemplateResponse(request, "not_found.html", {}, status_code=404)
         return await http_exception_handler(request, exc)
 
-    @app.exception_handler(tags.ManagedLabelError)
-    async def managed_shelf_refused(request: Request, exc: tags.ManagedLabelError):
-        return JSONResponse({"detail": str(exc)}, status_code=403)
+    @app.exception_handler(tags.SpaceConflict)
+    async def space_conflict(request: Request, exc: tags.SpaceConflict):
+        return JSONResponse({"detail": str(exc)}, status_code=422)
 
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception):
@@ -319,6 +319,7 @@ def create_app() -> FastAPI:
     app.include_router(taxonomy.router)
     from . import university
 
+    app.include_router(university.app_router)
     app.include_router(university.router)
     app.include_router(university.legacy_router)
     app.include_router(university.notes_router)
@@ -336,20 +337,24 @@ def create_app() -> FastAPI:
     app.include_router(spaces.router)
     app.include_router(projects.router)
     app.include_router(habits.router)
-    app.include_router(opds_router.router)
-    app.include_router(media_router.router)
-    app.include_router(notebook_highlights_router.router)
-    app.include_router(media_router.settings_router)
-    app.include_router(media_router.calibre_router)
-    app.include_router(notebook.legacy_citations_router)
-    app.include_router(notebook.citations_router)
-    app.include_router(notebook.glossary_router)
-    app.include_router(notebook.router)
+    app.include_router(opds_router.router, dependencies=[Depends(modules.required("library"))])
+    app.include_router(media_router.router, dependencies=[Depends(modules.required("library"))])
+    app.include_router(notebook_highlights_router.router, dependencies=[Depends(modules.required("notebook"))])
+    app.include_router(media_router.settings_router, dependencies=[Depends(modules.required("library"))])
+    app.include_router(media_router.calibre_router, dependencies=[Depends(modules.required("library"))])
+    app.include_router(notebook.legacy_citations_router, dependencies=[Depends(modules.required("library"))])
+    app.include_router(notebook.citations_router, dependencies=[Depends(modules.required("library"))])
+    app.include_router(notebook.glossary_router, dependencies=[Depends(modules.required("notebook"))])
+    app.include_router(notebook.router, dependencies=[Depends(modules.required("notebook"))])
     app.include_router(defaults.router)
-    app.include_router(notebook.field_settings_router)
-    app.include_router(notebook.frontmatter_settings_router)
-    app.include_router(finance.router)
-    app.include_router(finance.settings_router)
+    app.include_router(notebook.field_settings_router, dependencies=[Depends(modules.required("notebook"))])
+    app.include_router(notebook.frontmatter_settings_router, dependencies=[Depends(modules.required("notebook"))])
+    from .routers import accounts as accounts_router
+    app.include_router(accounts_router.router)
+    app.include_router(accounts_router.settings_router)
+    app.include_router(finance.router, dependencies=[Depends(modules.required("finance"))])
+    app.include_router(finance.settings_router, dependencies=[Depends(modules.required("finance"))])
+    app.include_router(finance.old_settings_router)
     app.include_router(push.router)
     app.include_router(perf_router.router)
     app.include_router(banners.router)

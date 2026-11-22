@@ -6,6 +6,8 @@ import { Overlayer } from "./foliate/overlayer.js";
 const root = document.querySelector("[data-book-reader]");
 if (root) {
   const uid = root.dataset.uid;
+  // The language named for the attached file wins over the one the book file declares; both feed reading aloud and the lookups.
+  const bookLanguage = () => root.dataset.language || (view.language && view.language.canonical) || "";
   const settings = JSON.parse(root.dataset.reader || "{}");
   const choices = JSON.parse(root.dataset.choices || "{}");
   const position = JSON.parse(root.dataset.position || "{}");
@@ -694,7 +696,7 @@ if (root) {
   async function define(text) {
     defineBox.hidden = false;
     defineBox.textContent = "Looking it up…";
-    const lang = (view.language && view.language.canonical) || "en";
+    const lang = bookLanguage() || "en";
     try {
       const resp = await fetch(`/library/define?q=${encodeURIComponent(text.slice(0, 80))}&lang=${encodeURIComponent(lang)}`);
       const d = await resp.json();
@@ -865,7 +867,7 @@ if (root) {
         ssml = view.tts.start();
         if (!ssml) break;
       }
-      const lang = (view.language && view.language.canonical) || "";
+      const lang = bookLanguage() || "";
       const parts = ssmlParts(ssml);
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
@@ -890,7 +892,7 @@ if (root) {
       }
       if (!speaking) return;
       const text = doc && doc.querySelector(".textLayer") ? doc.querySelector(".textLayer").innerText : "";
-      for (const part of chunks(text)) { if (!speaking) return; await say(part, (view.language && view.language.canonical) || ""); }
+      for (const part of chunks(text)) { if (!speaking) return; await say(part, bookLanguage() || ""); }
       if (!speaking) return;
       const before = idx;
       await view.next();

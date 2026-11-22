@@ -1,9 +1,9 @@
 {# View-modal rows: a label on the left, the value on the right. A row with a `field` is edited in place: clicking the value swaps in
    the editor (always an app component, never a bare control) and static/view_inline.js saves it to `url`. #}
 {% macro vi_rows() -%}<div class="vi-rows">{{ caller() }}</div>{%- endmacro %}
-{% macro vi_row(icon_name, label, field='', url='', editor='', empty='') -%}
+{% macro vi_row(icon_name, label, field='', url='', editor='', empty='', secret=false) -%}
 <div class="vi-row"><span class="vi-k">{{ icon(icon_name, 'icon-sm') }}{{ label }}</span>
-<div class="vi-v{% if field %} vi-editable{% endif %}"{% if field %} data-vi-field="{{ field }}" data-vi-url="{{ url }}" data-vi-empty="{{ empty }}" tabindex="0" role="button" aria-label="Edit {{ label|lower }}"{% endif %}><span class="vi-display">{{ caller() }}</span>{% if field %}<template class="vi-editor">{{ editor }}</template>{{ icon('edit', 'icon-sm vi-pen') }}{% endif %}</div></div>
+<div class="vi-v{% if field %} vi-editable{% endif %}"{% if field %} data-vi-field="{{ field }}" data-vi-url="{{ url }}" data-vi-empty="{{ empty }}"{% if secret %} data-vi-secret{% endif %} tabindex="0" role="button" aria-label="Edit {{ label|lower }}"{% endif %}><span class="vi-display">{{ caller() }}</span>{% if field %}<template class="vi-editor">{{ editor }}</template>{{ icon('edit', 'icon-sm vi-pen') }}{% endif %}</div></div>
 {%- endmacro %}
 {% macro vi_person(person) -%}<span class="vi-person">{{ avatar(person, '', true) }}{{ person.full_name or 'Unnamed' }}</span>{%- endmacro %}
 {# One linked item (a task, event or contact) as a compact row: icon and title on the left, a date on the right, grayed once it is past. #}

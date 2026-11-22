@@ -55,7 +55,7 @@ def decode_cursor(cursor: str) -> list[Any] | None:
 
 def page_citations(conn: sqlite3.Connection, *, q: str = "", types: list[str] | None = None, authors: list[str] | None = None,
                    year_lo: int | None = None, year_hi: int | None = None, sources: list[str] | None = None, statuses: list[str] | None = None,
-                   tags: list[str] | None = None, shelves: list[str] | None = None,
+                   spaces: list[str] | None = None,
                    sort: str = "title", sort2: str = "title",
                    after: str = "", limit: int = PAGE_SIZE, offset: int = 0) -> dict[str, Any]:
     """One page of rows ordered by (sort, sort2, title, uid), the cursor of the next page or "", and the match count. Pages follow
@@ -71,13 +71,9 @@ def page_citations(conn: sqlite3.Connection, *, q: str = "", types: list[str] | 
     if authors:
         where.append(f"EXISTS (SELECT 1 FROM json_each(authors_json) WHERE ({_AUTHOR_KEY}) IN ({','.join('?' for _ in authors)}))")
         args += authors
-    if tags:
-        where.append(f"EXISTS (SELECT 1 FROM object_tags t WHERE t.object_type = 'media' AND t.object_id = citations.uid AND t.tag_name IN ({','.join('?' for _ in tags)}) COLLATE NOCASE)")
-        args += tags
-    if shelves:
-        where.append("EXISTS (SELECT 1 FROM object_tags t JOIN label_tags lt ON lt.name = t.tag_name WHERE t.object_type = 'media' AND t.object_id = citations.uid "
-                     f"AND lt.label_name IN ({','.join('?' for _ in shelves)}) COLLATE NOCASE)")
-        args += shelves
+    if spaces:
+        where.append(f"lower(citations.space) IN ({','.join('?' for _ in spaces)})")
+        args += [x.lower() for x in spaces]
     if statuses:
         where.append(f"status IN ({','.join('?' for _ in statuses)})")
         args += ["" if s == "none" else s for s in statuses]
@@ -198,6 +194,14 @@ def save_edition(conn: sqlite3.Connection, citation_uid: str, fields: dict[str, 
     return uid
 
 
+def set_edition_language(conn: sqlite3.Connection, uid: str, language: str) -> None:
+    """The language of an edition's file ("" for the book's own); reading aloud follows it."""
+    from .. import book_speech
+
+    conn.execute("UPDATE citation_editions SET language = ? WHERE uid = ?", (book_speech.language_code(language), uid))
+    conn.commit()
+
+
 def delete_edition(conn: sqlite3.Connection, uid: str) -> None:
     clear_edition_file(conn, uid)
     conn.execute("DELETE FROM citation_editions WHERE uid = ?", (uid,))
@@ -312,6 +316,13 @@ def author_options(conn: sqlite3.Connection, q: str = "", selected: list[str] | 
                         "WHERE k != '' AND lower(k) LIKE ? ORDER BY lower(k) LIMIT ?", (needle, limit + len(taken))).fetchall()
     items += [{"uid": r[0], "name": r[0]} for r in rows if r[0] not in taken][:limit]
     return items
+
+
+def keyword_options(conn: sqlite3.Connection, limit: int = 400) -> list[str]:
+    """Every keyword used in the library, most used first, for the Keywords dropdown."""
+    rows = conn.execute("SELECT value AS k, COUNT(*) AS n FROM citations, json_each(citations.keywords_json) WHERE value != '' "
+                        "GROUP BY lower(value) ORDER BY n DESC, lower(value) LIMIT ?", (limit,)).fetchall()
+    return [r[0] for r in rows]
 
 
 BOOK_TYPES = frozenset({"book", "chapter", "thesis", "report"})

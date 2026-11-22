@@ -92,3 +92,21 @@ def settings_items() -> list[tuple[str, str]]:
 def page_types() -> dict[str, str]:
     """Page type key to label for the enabled modules' page types."""
     return {k: p.label for k, p in PAGE_TYPES.items() if p.module in enabled_keys()}
+
+
+CORE_APPS = (("notebook", "Notebook", "/settings/notebook", "notebook", "Notes, journal, entries and citations"),
+             ("library", "Library", "/settings/library", "library", "Books, films and other works, with reading and watching progress"),
+             ("finance", "Finance", "/settings/finance", "dollar-sign", "Accounts, transactions and scheduled payments"))
+for _key, _title, _url, _icon, _description in CORE_APPS:
+    register(Module(_key, _title, _url, icon=_icon, description=_description))
+
+
+def required(key: str):
+    """A route dependency: the page exists only while the module is on."""
+    from fastapi import HTTPException
+
+    def check() -> None:
+        if not is_enabled(key):
+            raise HTTPException(404, "Not found")
+
+    return check

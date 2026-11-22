@@ -1,5 +1,5 @@
 """The Tasks list's grouping: by default sections by due date (Overdue, Today, This week, Later, No date) with a task
-appearing once; `shelf` gives one section per shelf, `none` one plain list. Completed is always last."""
+appearing once; `space` or `tag` gives one section per space or tag, `none` one plain list. Completed is always last."""
 
 from __future__ import annotations
 
@@ -51,9 +51,8 @@ def _task(conn, uid, tags=None, status="active", due_at=None, title=None):
 
 def _shelf_tag(conn, shelf, name):
     """A tag `name` on shelf `shelf`."""
-    tags.ensure_schema(conn)
-    conn.execute("INSERT OR IGNORE INTO label_tags (name, label_name) VALUES (?, ?)", (name, shelf))
-    conn.commit()
+    db.ensure_group(conn, shelf)
+    db.upsert_label_config(conn, {"name": name, "label_group": shelf})
 
 
 def _tagged(conn, uid, names, **kw):
@@ -87,10 +86,10 @@ class TestDateSections:
         assert [g["name"] for g in groups] == ["Overdue", "Today", "This week", "Later", "No date", "Completed"]
         assert [[t["uid"] for t in g["tasks"]] for g in groups] == [["late"], ["now"], ["soon"], ["far"], ["undated"], ["fin"]]
 
-    def test_a_task_with_tags_on_two_shelves_appears_once(self, conn):
+    def test_a_task_with_two_tags_appears_once(self, conn):
         _shelf_tag(conn, "Work", "Client A")
-        _shelf_tag(conn, "Home", "Chores")
-        _tagged(conn, "t1", ["Client A", "Chores"], due_at=_day(0))
+        _shelf_tag(conn, "Work", "Client B")
+        _tagged(conn, "t1", ["Client A", "Client B"], due_at=_day(0))
         assert [t["uid"] for g in _groups(conn) for t in g["tasks"]] == ["t1"]
 
     def test_empty_sections_are_left_out(self, conn):
@@ -103,32 +102,38 @@ class TestDateSections:
         assert [t["uid"] for t in _groups(conn)[0]["tasks"]] == ["a", "m", "z"]
 
 
-class TestShelfSections:
-    def test_shelves_then_untagged_then_completed(self, conn):
+class TestSpaceAndTagSections:
+    def test_spaces_then_untagged_then_completed(self, conn):
         _shelf_tag(conn, "Home", "Chores")
         _tagged(conn, "a1", ["Chores"])
         _task(conn, "loose1", tags=[])
         _tagged(conn, "done1", ["Chores"], status="done")
-        assert [g["kind"] for g in _groups(conn, "shelf")] == ["label", "unassigned", "completed"]
+        assert [g["kind"] for g in _groups(conn, "space")] == ["label", "unassigned", "completed"]
 
-    def test_shelves_are_alphabetical_case_insensitive(self, conn):
+    def test_spaces_are_alphabetical_case_insensitive(self, conn):
         for shelf in ("banana", "Apple", "cherry"):
             _shelf_tag(conn, shelf, shelf)
             _tagged(conn, shelf, [shelf])
-        assert [g["name"] for g in _groups(conn, "shelf")] == ["Apple", "banana", "cherry"]
+        assert [g["name"] for g in _groups(conn, "space")] == ["Apple", "banana", "cherry"]
 
     def test_two_tags_on_one_shelf_list_the_task_once(self, conn):
         _shelf_tag(conn, "Work", "Client A")
         _shelf_tag(conn, "Work", "Client B")
         _tagged(conn, "t1", ["Client A", "Client B"])
-        work = _group(_groups(conn, "shelf"), "label", "Work")
+        work = _group(_groups(conn, "space"), "label", "Work")
         assert [t["uid"] for t in work["tasks"]] == ["t1"]
 
-    def test_a_task_with_tags_on_two_shelves_appears_in_both_sections(self, conn):
+    def test_by_tag_a_task_with_two_tags_appears_in_both_sections(self, conn):
         _shelf_tag(conn, "Work", "Client A")
-        _shelf_tag(conn, "Home", "Chores")
-        _tagged(conn, "t1", ["Client A", "Chores"])
-        assert [g["name"] for g in _groups(conn, "shelf")] == ["Home", "Work"]
+        _shelf_tag(conn, "Work", "Client B")
+        _tagged(conn, "t1", ["Client A", "Client B"])
+        assert [g["name"] for g in _groups(conn, "tag")] == ["Client A", "Client B"]
+
+    def test_a_task_with_a_space_and_no_tag_sits_in_its_space(self, conn):
+        _shelf_tag(conn, "Work", "Client A")
+        _tagged(conn, "t1", ["Client A"])
+        db.delete_label_config(conn, "Client A")
+        assert [g["name"] for g in _groups(conn, "space")] == ["Work"]
 
 
 class TestPlainList:

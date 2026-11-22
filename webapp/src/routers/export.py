@@ -254,6 +254,8 @@ def build_backup_payload(conn) -> dict[str, Any]:
         "contacts": db.list_contacts(conn, include_archived=True),
         "labels": db.list_labels(conn),
         "object_labels": data_exchange.object_label_rows(conn),
+        "spaces": data_exchange.space_rows(conn),
+        "object_spaces": data_exchange.object_space_rows(conn),
         "schedule_holidays": db.list_holidays(conn),
         "task_completions": db.list_task_completions(conn),
         "habit_pauses": db.list_habit_pauses(conn),
@@ -738,11 +740,13 @@ def restore_backup_payload(conn, payload: dict[str, Any]) -> int:
     # are gone -- a backup now carries "labels" (label_config rows) and
     # "object_labels" (raw membership rows) instead, see export_data_json/
     # export_labels_json above.
-    for row in payload.get("labels", []):
-        with tags_module.managed_writes(row.get("managed_by") or tags_module.managed_by(conn, row.get("name"))):
-            db.upsert_label_config(conn, row)
+    for row in payload.get("spaces", []):
+        db.ensure_group(conn, row["name"])
+    for row in payload.get("labels", []):  # a backup from before shelves went carries shelves here; each becomes a tag
+        db.upsert_label_config(conn, {**row, "label_group": (row.get("label_group") or "").strip() or tags_module.OTHER_SPACE})
     for row in payload.get("object_labels", []):
         db.add_object_label(conn, row["object_type"], row["object_id"], row["label_name"])
+    data_exchange.restore_object_spaces(conn, payload.get("object_spaces", []))
     # 1.6 (Schedule & recurrence rework): no more `payload.get(
     # "schedule_classes", [])` restore loop -- a class is a real event now
     # (already restored by the "events" loop above). A backup file from

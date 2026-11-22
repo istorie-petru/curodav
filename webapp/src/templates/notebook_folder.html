@@ -1,4 +1,4 @@
-{% set page_add = ({'post': '/notebook/journal/week', 'fields': {'week': current_week}, 'label': "This week's note"} if kind == 'journal' else {'href': '/notebook/new' ~ (('?label=' ~ (name | urlencode) ~ ('&tag=' ~ (tag | urlencode) if tag else '')) if kind in ('label', 'project') else ''), 'label': 'New document'}) %}
+{% set page_add = ({'post': '/notebook/journal/week', 'fields': {'week': current_week}, 'label': "This week's note"} if kind == 'journal' else {'href': '/notebook/new' ~ (('?label=' ~ (name | urlencode) ~ ('&tag=' ~ (tag | urlencode) if tag else '')) if kind == 'space' else ''), 'label': 'New document'}) %}
 {% extends "base.html" %}
 {% from "_empty_state.html" import empty_state %}
 {% from "_journal_strip.html" import journal_strip %}
@@ -54,7 +54,7 @@
         {% for f in subfolders %}
         <div class="contact-row-wrap notebook-folder-row">
             <span class="notebook-row-gap" aria-hidden="true"></span>
-            <a class="contact-row" href="/notebook/folder?kind=label&amp;name={{ name | urlencode }}&amp;tag={{ f.name | urlencode }}">
+            <a class="contact-row" href="/notebook/folder?kind=space&amp;name={{ name | urlencode }}&amp;tag={{ f.name | urlencode }}">
                 <span class="notebook-row-icon">{{ icon('folder', 'icon-sm cal-' ~ (f.color or 'gray')) }}</span>
                 <span class="contact-row-main"><span class="contact-row-name">{{ f.name }}</span><span class="contact-row-sub">{{ f.count }} note{{ 's' if f.count != 1 else '' }}</span></span>
             </a>

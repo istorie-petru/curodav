@@ -29,60 +29,48 @@ HOURS = lambda conn: app_defaults.HOUR_CHOICES  # noqa: E731
 CALENDAR_VIEWS = lambda conn: app_defaults.CALENDAR_VIEWS  # noqa: E731
 
 ROWS = [
-    {"group": "Calendar", "key": "calendar_view", "label": "Calendar opens on", "hint": "The view the Calendar tab opens", "choices": CALENDAR_VIEWS},
-    {"group": "Tasks", "key": "tasks_view", "label": "Tasks opens on", "hint": "The view the Tasks tab opens", "choices": lambda conn: app_defaults.TASKS_VIEWS},
-    {"group": "Tasks", "key": "habit_reminder", "label": "Habit reminder", "hint": "Preselected when a habit is created", "choices": HOURS},
-    {"group": "Notifications", "key": "quiet_start", "label": "Quiet hours start", "hint": "No reminders are sent from this time", "choices": HOURS},
-    {"group": "Notifications", "key": "quiet_end", "label": "Quiet hours end", "hint": "Reminders resume at this time", "choices": HOURS},
-    {"group": "Calendar", "key": "event_reminder", "label": "Event reminder", "hint": "Added to new events", "choices": REMINDERS},
-    {"group": "Calendar", "key": "event_length", "label": "Event length", "hint": "Fills the end time of a new timed event", "choices": LENGTHS},
-    {"group": "University", "key": "class_reminder", "label": "Class reminder", "hint": "Added to classes created from now on", "choices": REMINDERS},
-    {"group": "Notebook", "key": "note_tag", "label": "Note tag", "hint": "Preselected when a note is created outside a folder", "choices": _tags},
+    {"page": "calendar", "key": "calendar_view", "label": "Calendar opens on", "hint": "The view the Calendar tab opens", "choices": CALENDAR_VIEWS},
+    {"page": "calendar", "key": "event_reminder", "label": "Event reminder", "hint": "Added to new events", "choices": REMINDERS},
+    {"page": "calendar", "key": "event_length", "label": "Event length", "hint": "Fills the end time of a new timed event", "choices": LENGTHS},
+    {"page": "tasks", "key": "tasks_view", "label": "Tasks opens on", "hint": "The view the Tasks tab opens", "choices": lambda conn: app_defaults.TASKS_VIEWS},
+    {"page": "tasks", "key": "habit_reminder", "label": "Habit reminder", "hint": "Preselected when a habit is created", "choices": HOURS},
+    {"page": "notifications", "key": "quiet_start", "label": "Quiet hours start", "hint": "No reminders are sent from this time", "choices": HOURS},
+    {"page": "notifications", "key": "quiet_end", "label": "Quiet hours end", "hint": "Reminders resume at this time", "choices": HOURS},
+    {"page": "notebook", "key": "note_tag", "label": "Note tag", "hint": "Preselected when a note is created outside a folder", "choices": _tags},
 ]
+BACK = {"calendar": "/settings/calendar", "tasks": "/settings/tasks", "notifications": "/settings/notifications", "notebook": "/settings/notebook"}
 
 
-LINKS = [
-    {"group": "Set elsewhere", "label": "Week start, time format, time zone, currency", "hint": "General", "href": "/settings/general"},
-    {"group": "Set elsewhere", "label": "Morning reminder and notification types", "hint": "Notifications", "href": "/settings/notifications"},
-    {"group": "Set elsewhere", "label": "Journal template, citation format, entry types", "hint": "Notebook", "href": "/settings/notebook"},
-    {"group": "Set elsewhere", "label": "Rating scale and criteria, media kinds, film source", "hint": "Library", "href": "/settings/library"},
-]
-
-
-def _folder_rows(conn) -> list[dict]:
+def folder_rows(conn) -> list[dict]:
+    """The template a new note in each space's folder starts from, as rows for the Notebook page."""
     templates_ = [("", "Blank note")] + [(d["uid"], d["title"] or "Untitled") for d in db.list_notebook_documents(conn, scope="templates")]
     items = [{"uid": v, "name": n} for v, n in templates_]
-    folders = [f for f in db.list_notebook_folders(conn)["labels"] if f["kind"] != "unfiled"]
-    return [{"group": "Notebook folders", "key": app_defaults.FOLDER_TEMPLATE + f["name"], "label": f["name"], "hint": "Template for new notes",
+    folders = [f for f in db.list_notebook_folders(conn)["spaces"] if f["kind"] != "unfiled"]
+    return [{"page": "notebook", "back": BACK["notebook"], "key": app_defaults.FOLDER_TEMPLATE + f["name"], "label": f["name"], "hint": "Template for new notes",
              "items": items, "value": app_defaults.folder_template(conn, f["name"])} for f in folders]
 
 
-def _rows(conn) -> list[dict]:
+def rows_for(conn, page: str) -> list[dict]:
+    """The rows of one settings page, each with its dropdown items and current value and the page to come back to."""
     out = []
     for row in ROWS:
-        items = [{"uid": v, "name": n} for v, n in row["choices"](conn)]
-        out.append({**row, "items": items, "value": app_defaults.get(conn, row["key"])})
-    return out + _folder_rows(conn)
-
-
-@router.get("")
-def defaults_page(request: Request, conn=Depends(get_db)):
-    rows = _rows(conn)
-    groups = [{"name": g, "rows": [r for r in rows if r["group"] == g]} for g in dict.fromkeys(r["group"] for r in rows)]
-    groups.append({"name": LINKS[0]["group"], "rows": LINKS})
-    return templates.TemplateResponse(
-        "settings_defaults.html",
-        {"request": request, "active_tab": "settings_defaults", "crumbs": [{"url": "/settings", "name": "Settings"}], "title": "Defaults", "groups": groups},
-    )
+        if row["page"] == page:
+            items = [{"uid": v, "name": n} for v, n in row["choices"](conn)]
+            value = app_defaults.get(conn, row["key"])
+            if value not in {i["uid"] for i in items} and items and "" not in {i["uid"] for i in items}:
+                value = items[0]["uid"]  # nothing stored yet: the first choice is what applies
+            out.append({**row, "items": items, "value": value, "back": BACK[page]})
+    return out
 
 
 @router.post("")
-def save_default(key: str = Form(...), value: str = Form(""), conn=Depends(get_db)):
+def save_default(key: str = Form(...), value: str = Form(""), back: str = Form(""), conn=Depends(get_db)):
+    back = back if back in BACK.values() else "/settings/general"
     if key.startswith(app_defaults.FOLDER_TEMPLATE):
         if value == "" or db.get_notebook_document(conn, value):
             app_defaults.put_folder_template(conn, key[len(app_defaults.FOLDER_TEMPLATE):], value)
-        return RedirectResponse(url="/settings/defaults", status_code=303)
+        return RedirectResponse(url=back, status_code=303)
     row = next((r for r in ROWS if r["key"] == key), None)
     if row is not None and value in {v for v, _ in row["choices"](conn)}:
         app_defaults.put(conn, key, value)
-    return RedirectResponse(url="/settings/defaults", status_code=303)
+    return RedirectResponse(url=back, status_code=303)

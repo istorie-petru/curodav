@@ -11,6 +11,7 @@ from src import university_attendance as ua
 from src import university_evaluation as ue
 from src import university_plan as up
 from src.routers.labels import COLORS
+from src import study_page
 from src.university_discipline import discipline_page
 
 
@@ -73,7 +74,7 @@ def test_marking_from_a_menu_keeps_the_note_and_rejects_what_is_not_a_class(conn
     lecture = up.class_events(conn, sem["uid"], "Biology", "lecture")[0]
     ua.set_status(conn, lecture["uid"], "missed", "sick")
     resp = university.attendance_save(lecture["uid"], status="excused", note="", back="", keep_note="1", conn=conn)
-    assert resp.status_code == 303 and resp.headers["location"] == "/labels/Autumn%202026/disciplines/Biology"
+    assert resp.status_code == 303 and resp.headers["location"] == "/university/disciplines/Biology"
     assert ua.statuses_of(conn, [lecture["uid"]])[lecture["uid"]] == {"status": "excused", "note": "sick"}
     with pytest.raises(up.PlanError):
         ua.set_status(conn, lecture["uid"], "late")
@@ -112,7 +113,7 @@ def test_entry_conditions_are_worked_out_and_other_ones_are_ticked_by_hand(conn,
     ue.tick_condition(conn, sem["uid"], "Biology", "exam", other, True)
     exam = ue.standing(conn, sem["uid"], "Biology", date(2026, 10, 26))["ways"][0]
     assert [r["is_met"] for r in exam["condition_rows"]] == [True, True, True] and exam["eligible"] is True and exam["criteria"] == "Sources and dates"
-    page = discipline_page("Autumn 2026", "Biology", _request(), conn=conn).body.decode()
+    page = discipline_page("Biology", _request(), conn=conn).body.decode()
     assert "Exam" in page and "Grade" in page
 
 
@@ -159,7 +160,7 @@ def test_the_semester_lists_render_across_disciplines(conn, sem, frozen_today):
     ua.set_status(conn, _classes(conn, sem, "lecture")[0]["uid"], "missed")
     from src import study_page
     for view, expected in ((b"view=exams", "nbtl-item"), (b"view=exams", "Final")):
-        html = university._render_study(conn, _request("/labels/Autumn%202026", view), "Autumn 2026", {"name": "Autumn 2026", "icon": "", "color": ""}).body.decode()
+        html = study_page.render(conn, _request("/university", view)).body.decode()
         assert expected in html, view
     assert study_page.exams(conn, sem, date(2026, 10, 26))["groups"][0]["rows"][0]["title"] == "Final"
 

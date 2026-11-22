@@ -132,3 +132,13 @@ def test_the_check_command_reports_success_and_failure(tmp_path, capsys):
     with sqlite3.connect(path) as conn:
         conn.execute("INSERT INTO schema_migrations (number, name, applied_at) VALUES (999, 'x', 'x')")
     assert migrations.main(["check", str(path)]) == 1 and "ahead" in capsys.readouterr().err
+
+
+def test_notebook_library_and_finance_start_off_on_a_new_database_and_stay_on_on_an_old_one(tmp_path):
+    with db.connect(tmp_path / "new.sqlite") as conn:
+        assert conn.execute("SELECT value FROM app_meta WHERE key = 'modules_enabled'").fetchone() is None
+        conn.execute("DELETE FROM schema_migrations WHERE number = 96")
+        conn.commit()
+        migrations.run(conn)  # the database existed before this run
+        value = conn.execute("SELECT value FROM app_meta WHERE key = 'modules_enabled'").fetchone()[0]
+        assert set(value.split(",")) == {"finance", "library", "notebook"}

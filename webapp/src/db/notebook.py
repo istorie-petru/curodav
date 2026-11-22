@@ -20,31 +20,7 @@ from typing import Any
 
 from .. import media
 from .core import _HTML_TAG_RE, _WIKILINK_TARGET_RE, _collect_block_text, get_app_meta, set_app_meta
-from .labels import _attach_tags, _attach_tags_bulk, list_project_labels, set_object_labels
-
-
-def single_label_tags(conn: sqlite3.Connection, tags: list[str]) -> list[str]:
-    """A note has at most one project and one label: the first project label and the first other label, in the given order."""
-    project_names = {cfg["name"] for cfg in list_project_labels(conn)}
-    project = next((t for t in tags if t in project_names), None)
-    label = next((t for t in tags if t not in project_names), None)
-    return [t for t in (project, label) if t]
-
-
-def enforce_one_label_and_project(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Trims every note that has more than one project or label to the first of each, in the order they were attached.
-
-    Returns one report row per changed note: its uid, title and the labels that were dropped."""
-    report = []
-    rows = conn.execute("SELECT uid, title FROM notebook_documents").fetchall()
-    for row in rows:
-        names = [r[0] for r in conn.execute(
-            "SELECT label_name FROM object_labels WHERE object_type = 'notebook' AND object_id = ? ORDER BY rowid", (row["uid"],))]
-        kept = single_label_tags(conn, names)
-        if len(kept) < len(names):
-            set_object_labels(conn, "notebook", row["uid"], kept)
-            report.append({"uid": row["uid"], "title": row["title"], "kept": kept, "dropped": [n for n in names if n not in kept]})
-    return report
+from .labels import _attach_tags, _attach_tags_bulk, set_object_labels
 
 
 def upsert_notebook_document(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
@@ -61,8 +37,6 @@ def upsert_notebook_document(conn: sqlite3.Connection, row: dict[str, Any]) -> N
     data["is_template"] = 1 if data.get("is_template") else 0
     if data["is_template"]:
         tags = []
-    elif tags is not None:
-        tags = single_label_tags(conn, tags)
     values = [data.get(c) for c in cols]
     placeholders = ", ".join("?" for _ in cols)
     updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "uid")
@@ -154,10 +128,8 @@ def list_notebook_documents(
 
 
 def _folder_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Every note (no templates) with just what folders need, so content is never loaded for a count."""
-    projects = list_project_labels(conn)
-    open_projects = {c["name"] for c in projects if not c.get("archived_at")}
-    all_projects = {c["name"] for c in projects}
+    """Every note (no templates) with just what folders need, so content is never loaded for a count. A note sits in one
+    folder: its journal year, else its space, else Unfiled."""
     rows = [dict(r) for r in conn.execute(
         "SELECT uid, title, note_type, created_at, updated_at, journal_week, pinned FROM notebook_documents WHERE is_template = 0")]
     by_uid = {r["uid"]: r for r in rows}
@@ -166,14 +138,15 @@ def _folder_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         if row is None:
             continue
         row.setdefault("tags", []).append(label)
+    spaces = {uid: space for uid, space in conn.execute("SELECT object_id, space FROM object_spaces WHERE object_type = 'notebook'")}
     for row in rows:
-        tags = row.setdefault("tags", [])
+        row.setdefault("tags", [])
+        space = spaces.get(row["uid"])
+        row["space"] = space
         if row["journal_week"]:
             row["folder"] = ("journal", row["journal_week"][:4])
-            continue
-        project = next((t for t in tags if t in open_projects), None)
-        label = next((t for t in tags if t not in all_projects), None)
-        row["folder"] = ("project", project) if project else (("label", label) if label else ("unfiled", ""))
+        else:
+            row["folder"] = ("space", space) if space else ("unfiled", "")
     _attach_tags_bulk(conn, "notebook", rows)
     return rows
 
@@ -184,19 +157,17 @@ def notebook_folder_of(conn: sqlite3.Connection, uid: str) -> tuple[str, str]:
     return row["folder"] if row else ("", "")
 
 
-def list_notebook_subfolders(conn: sqlite3.Connection, label: str) -> list[dict[str, Any]]:
-    """The sub-folders of a shelf folder: one per tag that its notes carry, with a count and the tag's own look.
-    A shelf whose notes carry only its same-named default tag has none."""
+def list_notebook_subfolders(conn: sqlite3.Connection, space: str) -> list[dict[str, Any]]:
+    """The sub-folders of a space folder: one per tag that its notes carry, with a count and the tag's own look."""
     counts: dict[str, dict[str, Any]] = {}
     for row in _folder_rows(conn):
-        if row["folder"] != ("label", label):
+        if row["folder"] != ("space", space):
             continue
         for item in row.get("tag_items") or []:
-            if item["label"] == label:
-                entry = counts.setdefault(item["name"], {"name": item["name"], "color": item["color"], "icon": item["icon"], "count": 0})
-                entry["count"] += 1
-    if set(counts) <= {label}:
-        return []
+            if item.get("is_space"):
+                continue
+            entry = counts.setdefault(item["name"], {"name": item["name"], "color": item["color"], "icon": item["icon"], "count": 0})
+            entry["count"] += 1
     return sorted(counts.values(), key=lambda e: e["name"].lower())
 
 
@@ -309,10 +280,8 @@ def recent_notebook_documents(conn: sqlite3.Connection, limit: int = 5) -> list[
 
 
 def list_notebook_folders(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
-    """The home's folders: open projects first, then labels, with Unfiled last among the labels.
-
-    A note sits in exactly one folder: its open project, else its label, else Unfiled."""
-    from .labels import effective_label_config
+    """The home's folders: one per space that holds notes, with Unfiled last. A note sits in exactly one folder."""
+    from .labels import get_group_style
 
     counts: dict[tuple[str, str], dict[str, Any]] = {}
     for row in _folder_rows(conn):
@@ -321,17 +290,15 @@ def list_notebook_folders(conn: sqlite3.Connection) -> dict[str, list[dict[str, 
         entry = counts.setdefault(row["folder"], {"kind": row["folder"][0], "name": row["folder"][1], "count": 0, "last": ""})
         entry["count"] += 1
         entry["last"] = max(entry["last"], row["updated_at"] or "")
-    out: dict[str, list[dict[str, Any]]] = {"projects": [], "labels": []}
+    out: dict[str, list[dict[str, Any]]] = {"spaces": []}
     for (kind, name), entry in counts.items():
-        if kind != "unfiled":
-            cfg = effective_label_config(conn, name)
-            entry["color"] = cfg.get("color") or "gray"
-            entry["icon"] = cfg.get("icon") or ""
+        if kind == "space":
+            style = get_group_style(conn, name)
+            entry["color"], entry["icon"] = style["color"] or "gray", style["icon"] or "folder"
         else:
             entry["color"], entry["icon"] = "gray", "inbox"
-        out["projects" if kind == "project" else "labels"].append(entry)
-    out["projects"].sort(key=lambda e: e["last"], reverse=True)
-    out["labels"].sort(key=lambda e: (e["kind"] == "unfiled", e["name"].lower()))
+        out["spaces"].append(entry)
+    out["spaces"].sort(key=lambda e: (e["kind"] == "unfiled", e["name"].lower()))
     return out
 
 
@@ -925,19 +892,18 @@ def search_link_targets(
                           "icon": look["icon"], "color": look["color"], "group": "Entries"})
     rows = [r for r in _folder_rows(conn) if r["uid"] != exclude_uid and (not q or q in (r["title"] or "").lower())]
     mine = next((r for r in _folder_rows(conn) if r["uid"] == exclude_uid), None)
-    project_names = {c["name"] for c in list_project_labels(conn)}
-    my_projects = {t for t in (mine["tags"] if mine else []) if t in project_names}
-    my_labels = {t for t in (mine["tags"] if mine else []) if t not in project_names}
+    my_tags = set(mine["tags"]) if mine else set()
+    my_space = mine["space"] if mine else None
     looks = notebook_note_type_looks(conn)
     docs = []
     for r in rows:
         tags = set(r["tags"])
-        group = "Same project" if tags & my_projects else "Same label" if tags & my_labels else "Notes"
+        group = "Same tag" if tags & my_tags else "Same space" if my_space and r["space"] == my_space else "Notes"
         look = looks.get(r["note_type"] or "", dict(NOTEBOOK_TYPE_LOOK_FALLBACK))
         folder = r["folder"][1]
         docs.append({"kind": "doc", "uid": r["uid"], "title": r["title"] or "Untitled", "subtitle": folder or r["note_type"] or "",
                      "note_type": r["note_type"] or "", "icon": look["icon"], "color": look["color"], "group": group})
-    order = {"Same project": 0, "Same label": 1, "Notes": 2}
+    order = {"Same tag": 0, "Same space": 1, "Notes": 2}
     docs.sort(key=lambda d: (order[d["group"]], d["title"].lower()))
     return (items + docs)[:limit]
 
@@ -1065,7 +1031,7 @@ def get_citation(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
 
 
 CITATION_EXTRA_FIELDS = ("subtitle", "edition", "series", "volume", "issue", "pages", "publisher", "place", "isbn", "issn",
-                         "accessed", "institution", "degree", "editors", "note")
+                         "accessed", "institution", "degree", "editors", "note", "space")
 _CITATION_BASE_FIELDS = ("type", "title", "authors_json", "year", "container_title", "doi", "url")
 CITATION_STATUSES = media.status_options("read")
 _TRACKING_COUNTS = ("progress", "progress_total", "season", "repeats")

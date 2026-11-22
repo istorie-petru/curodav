@@ -123,22 +123,8 @@ def test_the_settings_page_is_not_found_while_the_module_is_off(monkeypatch, tmp
     assert any(d.dependency is university._enabled for d in university.router.dependencies)
 
 
-def test_a_module_page_type_is_offered_only_while_the_module_is_on(monkeypatch):
-    monkeypatch.delenv("CC_MODULES", raising=False)
-    assert "academic" not in db.page_types()
-    monkeypatch.setenv("CC_MODULES", "academic")
-    assert db.page_types()["academic"] == "Semester page" and "sections" in db.page_types()
 
 
-def test_a_shelf_with_a_module_page_type_keeps_it_while_the_module_is_on(monkeypatch, tmp_path):
-    monkeypatch.setenv("CC_MODULES", "academic")
-    with db.connect(tmp_path / "c.sqlite") as conn:
-        db.upsert_label_config(conn, {"name": "Uni", "page_type": "academic"})
-        assert db.get_label_config(conn, "Uni")["page_type"] == "academic"
-    monkeypatch.delenv("CC_MODULES")
-    with db.connect(tmp_path / "d.sqlite") as conn:
-        db.upsert_label_config(conn, {"name": "Uni", "page_type": "academic"})
-        assert db.get_label_config(conn, "Uni")["page_type"] == "sections"
 
 
 # ---- turning a module on in Settings ----
@@ -162,7 +148,7 @@ def test_a_module_is_turned_on_and_off_from_settings_and_the_choice_is_stored(mo
             settings_router.set_module("nope", enabled="1", conn=conn)
 
 
-def test_the_environment_still_forces_a_module_on_and_general_settings_lists_modules(monkeypatch, tmp_path):
+def test_the_environment_still_forces_a_module_on_and_the_modules_page_lists_modules(monkeypatch, tmp_path):
     from tests.settings_app import fake_app
     from src.routers import settings as settings_router
 
@@ -173,8 +159,8 @@ def test_the_environment_still_forces_a_module_on_and_general_settings_lists_mod
     with db.connect(tmp_path / "c.sqlite") as conn:
         req = _request("/settings/general")
         req.scope["app"] = fake_app()
-        html = settings_router.settings_general(req, conn=conn).body.decode()
-        assert "Academic module" in html and "/settings/modules/academic" in html
+        html = settings_router.settings_modules(req).body.decode()
+        assert "Academic" in html and "/settings/modules/academic" in html
 
 
 def _legacy_exams(conn):

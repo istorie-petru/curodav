@@ -8,6 +8,13 @@ import pytest
 from src import clock, db
 
 
+@pytest.fixture(autouse=True)
+def _core_apps_on(monkeypatch):
+    """Notebook, Library and Finance are modules that a new database starts without; the tests use them, so they are forced on.
+    A test that sets CC_MODULES itself replaces this."""
+    monkeypatch.setenv("CC_MODULES", "notebook,library,finance")
+
+
 def pytest_collection_modifyitems(items):
     """Core tests (the rules) run before everything else."""
     items.sort(key=lambda item: 0 if item.get_closest_marker("core") else 1)

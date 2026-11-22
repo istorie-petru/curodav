@@ -2,7 +2,7 @@
 
 Feature document: curodav-notes/documentation/features/api-and-mcp.md
 
-Words follow the app: a shelf is a label (`object_labels`), a tag is a `label_tags` row, a space is a label group.
+Words follow the app: a tag is a `label_config` row that belongs to one space (a label group), items link to tags in `object_labels` and keep their own space.
 A note's `revision` is its `updated_at`; a later write must name the revision it read.
 """
 
@@ -40,7 +40,7 @@ def _limit(limit: int | None, default: int = 30) -> int:
 
 
 def _tag_names(d: dict[str, Any]) -> list[str]:
-    return [t["name"] for t in d.get("tag_items") or []]
+    return [t["name"] for t in d.get("tag_items") or [] if not t.get("is_space")]
 
 
 def _url(kind: str, uid: str) -> str:
@@ -77,21 +77,21 @@ def search(conn: sqlite3.Connection, query: str, kinds: list[str] | None = None,
 
 def _note_summary(d: dict[str, Any]) -> dict[str, Any]:
     return {"uid": d["uid"], "title": d.get("title") or "", "note_type": d.get("note_type") or "",
-            "shelves": d.get("tags") or [], "tags": _tag_names(d), "pinned": bool(d.get("pinned")),
+            "tags": _tag_names(d), "space": d.get("space"), "pinned": bool(d.get("pinned")),
             "journal_week": d.get("journal_week") or "", "created_at": d.get("created_at"), "updated_at": d.get("updated_at"),
             "revision": d.get("updated_at") or "", "url": _url("note", d["uid"])}
 
 
-def list_notes(conn: sqlite3.Connection, *, shelf: str = "", tag: str = "", note_type: str = "", updated_since: str = "",
+def list_notes(conn: sqlite3.Connection, *, space: str = "", tag: str = "", note_type: str = "", updated_since: str = "",
                cursor: str = "", limit: int | None = None) -> dict[str, Any]:
     """Notes newest edit first, one keyset page at a time. Templates are left out."""
     limit = _limit(limit)
     where, args = ["d.is_template = 0"], []
-    if shelf:
-        where.append("EXISTS (SELECT 1 FROM object_labels l WHERE l.object_type = 'notebook' AND l.object_id = d.uid AND l.label_name = ? COLLATE NOCASE)")
-        args.append(shelf)
+    if space:
+        where.append("EXISTS (SELECT 1 FROM object_spaces s WHERE s.object_type = 'notebook' AND s.object_id = d.uid AND s.space = ? COLLATE NOCASE)")
+        args.append(space)
     if tag:
-        where.append("EXISTS (SELECT 1 FROM object_tags t WHERE t.object_type = 'note' AND t.object_id = d.uid AND t.tag_name = ?)")
+        where.append("EXISTS (SELECT 1 FROM object_labels t WHERE t.object_type = 'notebook' AND t.object_id = d.uid AND t.label_name = ? COLLATE NOCASE)")
         args.append(tag)
     if note_type:
         where.append("d.note_type = ?")
@@ -233,7 +233,7 @@ def get_entry(conn: sqlite3.Connection, uid: str) -> dict[str, Any]:
 def _task_out(t: dict[str, Any]) -> dict[str, Any]:
     return {"uid": t["uid"], "title": t.get("title") or "", "description": t.get("description") or "", "status": t.get("status"),
             "start_at": t.get("start_at"), "due_at": t.get("due_at"), "completed_at": t.get("completed_at"),
-            "progress": t.get("progress"), "shelves": t.get("tags") or [], "tags": _tag_names(t),
+            "progress": t.get("progress"), "tags": _tag_names(t), "space": t.get("space"),
             "updated_at": t.get("updated_at"), "url": _url("task", t["uid"])}
 
 
@@ -272,7 +272,7 @@ def get_task(conn: sqlite3.Connection, uid: str) -> dict[str, Any]:
 def _event_out(e: dict[str, Any]) -> dict[str, Any]:
     return {"uid": e["uid"], "title": e.get("title") or "", "description": e.get("description") or "", "status": e.get("status"),
             "start_at": e.get("start_at"), "end_at": e.get("end_at"), "all_day": bool(e.get("all_day")),
-            "location": e.get("location") or "", "series_uid": e.get("series_uid"), "shelves": e.get("tags") or [],
+            "location": e.get("location") or "", "series_uid": e.get("series_uid"), "space": e.get("space"),
             "tags": _tag_names(e), "updated_at": e.get("updated_at"), "url": _url("event", e["uid"])}
 
 
@@ -294,12 +294,12 @@ def get_event(conn: sqlite3.Connection, uid: str) -> dict[str, Any]:
     return _event_out(e)
 
 
-# ---- Spaces, shelves and tags ----
+# ---- Spaces and tags ----
 
 def list_organisation(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Spaces with their shelves, and every tag with the shelf it belongs to."""
-    spaces = [{"name": g["name"], "shelves": [lbl["name"] for lbl in g.get("labels") or []]} for g in db.list_groups(conn)]
-    return {"spaces": spaces, "tags": [{"name": t["name"], "shelf": t["label_name"]} for t in tags.list_tags(conn)]}
+    """Spaces with their tags, and every tag with the space it belongs to."""
+    spaces = [{"name": g["name"], "tags": [lbl["name"] for lbl in g.get("labels") or []]} for g in db.list_groups(conn)]
+    return {"spaces": spaces, "tags": [{"name": t["name"], "space": t["space"]} for t in tags.list_tags(conn)]}
 
 
 # ---- University ----
@@ -319,7 +319,7 @@ def _semester(conn: sqlite3.Connection, uid: str = "") -> dict[str, Any] | None:
 def _discipline_url(conn: sqlite3.Connection, semester: dict[str, Any], name: str) -> str:
     from . import university_plan as up
 
-    return f"/labels/{quote(semester['shelf_name'])}/disciplines/{quote(name)}"
+    return up.discipline_url(name)
 
 
 def _semester_out(s: dict[str, Any]) -> dict[str, Any]:

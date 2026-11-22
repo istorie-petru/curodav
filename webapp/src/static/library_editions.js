@@ -13,6 +13,8 @@
   function showSource(scope, source) {
     scope.querySelector("[data-edition-link]").hidden = source !== "link";
     scope.querySelector("[data-edition-file]").hidden = source !== "local";
+    var language = scope.querySelector("[data-edition-language]");
+    if (language) language.hidden = source !== "local";
   }
 
   function pickSource(scope, source) {
@@ -27,6 +29,8 @@
     var editions = JSON.parse(scope.dataset.editions || "[]");
     var e = editions.find(function (x) { return x.uid === uid; }) || {};
     ["edition", "year", "publisher", "place", "isbn", "doi", "url"].forEach(function (k) { setField(scope, "ed_" + k, e[k]); });
+    var language = scope.querySelector('input[name="ed_language"][value="' + (e.language || "") + '"]');
+    if (language) { language.checked = true; language.dispatchEvent(new Event("change", { bubbles: true })); }
     var file = scope.querySelector('input[type="file"]');
     if (file) file.value = "";
     var value = scope.querySelector("[data-upload-value]");

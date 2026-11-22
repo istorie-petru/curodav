@@ -63,7 +63,7 @@ def _note(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
         return None
     return {"doc": dict(doc), "properties": _rows(conn, "SELECT * FROM notebook_properties WHERE notebook_uid = ? ORDER BY uid", (uid,)),
             "labels": _rows(conn, "SELECT * FROM object_labels WHERE object_type = 'notebook' AND object_id = ? ORDER BY label_name", (uid,)),
-            "tags": _rows(conn, "SELECT * FROM object_tags WHERE object_type IN ('note', 'notebook') AND object_id = ? ORDER BY tag_name", (uid,))}
+            "space": _rows(conn, "SELECT * FROM object_spaces WHERE object_type = 'notebook' AND object_id = ?", (uid,))}
 
 
 def _library(conn: sqlite3.Connection, uid: str) -> dict[str, Any] | None:
@@ -103,14 +103,14 @@ def _discipline(conn: sqlite3.Connection, key: list[str]) -> dict[str, Any]:
     event_uids |= {r["event_uid"] for r in tables["university_milestones"] if r["event_uid"]}
     task_uids = {r["task_uid"] for r in tables["university_milestones"] if r["task_uid"]}
     task_uids |= {r["task_uid"] for r in tables["university_readings"]}
-    task_uids |= {r[0] for r in conn.execute("SELECT object_id FROM object_tags WHERE object_type = 'task' AND tag_name = ? COLLATE NOCASE", (name,))}
+    task_uids |= {r[0] for r in conn.execute("SELECT object_id FROM object_labels WHERE object_type = 'task' AND label_name = ? COLLATE NOCASE", (name,))}
     events, tasks = sorted(event_uids), sorted(task_uids)
     tables["university_attendance"] = _rows(conn, f"SELECT * FROM university_attendance WHERE event_uid IN ({_in(events)}) ORDER BY event_uid", events)
     links = events + tasks
-    for t in ("object_tags", "object_contacts"):
+    for t in ("object_labels", "object_contacts"):
         tables[t] = _rows(conn, f"SELECT * FROM {t} WHERE object_type IN ('event', 'task') AND object_id IN ({_in(links)}) "
-                                f"ORDER BY object_type, object_id, {'tag_name' if t == 'object_tags' else 'contact_uid'}", links)
-    tables["teacher_tags"] = _rows(conn, "SELECT * FROM object_tags WHERE object_type = 'contact' AND tag_name = ? COLLATE NOCASE ORDER BY object_id", (name,))
+                                f"ORDER BY object_type, object_id, {'label_name' if t == 'object_labels' else 'contact_uid'}", links)
+    tables["teacher_tags"] = _rows(conn, "SELECT * FROM object_labels WHERE object_type = 'contact' AND label_name = ? COLLATE NOCASE ORDER BY object_id", (name,))
     return {"tables": tables, "events": [e for e in (db.get_event(conn, u) for u in events) if e],
             "tasks": [t for t in (db.get_task(conn, u) for u in tasks) if t]}
 
@@ -139,11 +139,11 @@ def _restore_note(conn: sqlite3.Connection, uid: str, snap: dict[str, Any] | Non
     content = json.loads(snap["doc"]["content_json"] or '{"blocks": []}')
     conn.execute("DELETE FROM notebook_properties WHERE notebook_uid = ?", (uid,))
     conn.execute("DELETE FROM object_labels WHERE object_type = 'notebook' AND object_id = ?", (uid,))
-    conn.execute("DELETE FROM object_tags WHERE object_type IN ('note', 'notebook') AND object_id = ?", (uid,))
+    conn.execute("DELETE FROM object_spaces WHERE object_type = 'notebook' AND object_id = ?", (uid,))
     _put_rows(conn, "notebook_documents", [snap["doc"]])
     _put_rows(conn, "notebook_properties", snap["properties"])
     _put_rows(conn, "object_labels", snap["labels"])
-    _put_rows(conn, "object_tags", snap["tags"])
+    _put_rows(conn, "object_spaces", snap.get("space", []))
     conn.commit()
     updated = snap["doc"]["updated_at"]
     db.set_notebook_document_content(conn, uid, content)
@@ -218,16 +218,16 @@ def _restore_discipline(conn: sqlite3.Connection, key: list[str], snap: dict[str
         conn.execute(f"DELETE FROM university_topic_classes WHERE topic_uid IN ({_in(topics)})", topics)
         links = [e["uid"] for e in now["events"]] + [t["uid"] for t in now["tasks"]]
         conn.execute(f"DELETE FROM university_attendance WHERE event_uid IN ({_in(links)})", links)
-        for t in ("object_tags", "object_contacts"):
+        for t in ("object_labels", "object_contacts"):
             conn.execute(f"DELETE FROM {t} WHERE object_type IN ('event', 'task') AND object_id IN ({_in(links)})", links)
-        conn.execute("DELETE FROM object_tags WHERE object_type = 'contact' AND tag_name = ? COLLATE NOCASE", (name,))
+        conn.execute("DELETE FROM object_labels WHERE object_type = 'contact' AND label_name = ? COLLATE NOCASE", (name,))
         conn.commit()
         for e in snap["events"]:
             db.upsert_event(conn, dict(e))
         for t in snap["tasks"]:
             db.upsert_task(conn, dict(t))
         for table, rows in snap["tables"].items():
-            _put_rows(conn, "object_tags" if table == "teacher_tags" else table, rows)
+            _put_rows(conn, "object_labels" if table == "teacher_tags" else table, rows)
         conn.commit()
 
 

@@ -27,6 +27,7 @@ from starlette.requests import Request
 from src import db, deps
 from src.routers import calendar as calendar_router
 from src.routers import settings as settings_router
+from src.routers import taxonomy as taxonomy_router
 
 # 2026-08-10 is a Monday; a Monday-anchored week that starts exactly on the
 # 10th and runs to the 6th of September -- convenient fixed dates that put
@@ -410,11 +411,11 @@ class TestFourWeekViewTemplate:
 
 class TestFourWeekPositionSetting:
     def test_general_page_renders_control_defaulting_to_first(self, conn):
-        resp = settings_router.settings_general(_bare_request("/settings/general"), conn=conn)
+        resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), conn=conn)
         body = resp.body.decode()
         assert 'action="/settings/four-week-position"' in body
         assert "First" in body and "Second" in body and "Third" in body and "Fourth" in body
-        assert resp.context["current_four_week_position"] == 1
+        assert resp.context["four_week_position"] == "1"
 
     def test_general_page_checks_stored_position(self, conn):
         # 2026-09-24: the segmented control was swapped for the same
@@ -423,15 +424,15 @@ class TestFourWeekPositionSetting:
         # (a form=/data-* attribute lands between them), so match with a
         # small gap rather than an exact adjacent string.
         db.set_app_meta(conn, deps.FOUR_WEEK_POSITION_KEY, "3")
-        resp = settings_router.settings_general(_bare_request("/settings/general"), conn=conn)
-        assert resp.context["current_four_week_position"] == 3
+        resp = taxonomy_router.manage_calendar(_bare_request("/settings/calendar"), conn=conn)
+        assert resp.context["four_week_position"] == "3"
         body = resp.body.decode()
         assert re.search(r'value="3"[^<]*checked', body)
 
     def test_set_route_stores_position(self, conn):
         resp = settings_router.set_four_week_position(position="4", conn=conn)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/settings/general"
+        assert resp.headers["location"] == "/settings/calendar"
         assert db.get_app_meta(conn, deps.FOUR_WEEK_POSITION_KEY) == "4"
 
     def test_set_route_rejects_unrecognized_values(self, conn):

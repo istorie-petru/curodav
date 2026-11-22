@@ -52,7 +52,7 @@ class TestSettingsHolidaysPage:
         resp = taxonomy_router.manage_calendar(_request(), view="holidays", conn=conn)
         assert resp.status_code == 200
         assert resp.context["view"] == "holidays"
-        assert resp.context["crumbs"] == [{"url": "/settings", "name": "Settings"}]
+        assert resp.context["crumbs"] == [{"url": "/settings/calendar", "name": "Calendar"}]
         body = resp.body.decode()
         assert 'href="/settings"' in body
 

@@ -128,6 +128,8 @@ def task_row_to_ical(row: dict[str, Any]) -> bytes:
         todo.add("PERCENT-COMPLETE", round(row["progress"] * 100))
     if row.get("tags"):
         todo.add("CATEGORIES", list(row["tags"]))
+    if row.get("space"):
+        todo.add("X-CURODAV-SPACE", row["space"])
     # 1.2 (task-model decision): the parent-task/subtask hierarchy is
     # removed -- tasks are flat, so there is no RELATED-TO;RELTYPE=PARENT
     # on export anymore. (The old `tasks.parent_uid` column stays
@@ -179,6 +181,8 @@ def ical_to_task_row(todo: Todo) -> dict[str, Any]:
         cats = todo.get("CATEGORIES")
         cats_list = cats.cats if hasattr(cats, "cats") else cats
         row["tags"] = [str(c) for c in cats_list]
+    if "X-CURODAV-SPACE" in todo:
+        row["space"] = str(todo.get("X-CURODAV-SPACE"))
     # 1.2: RELATED-TO;RELTYPE=PARENT (subtask links) is deliberately not
     # parsed back -- tasks are flat now. See the export-side comment above.
     if "RRULE" in todo:
@@ -216,6 +220,8 @@ def event_row_to_ical(row: dict[str, Any]) -> bytes:
         event.add("URL", row["meeting_url"])
     if row.get("tags"):
         event.add("CATEGORIES", list(row["tags"]))
+    if row.get("space"):
+        event.add("X-CURODAV-SPACE", row["space"])
     # 1.6 ("Manual recurrence exceptions"): a moved/modified single
     # occurrence is a second VEVENT sharing the master's UID, with a
     # RECURRENCE-ID identifying which original occurrence it replaces --
@@ -284,6 +290,8 @@ def ical_to_event_row(event: Event, one_time: bool = False) -> dict[str, Any]:
         cats = event.get("CATEGORIES")
         cats_list = cats.cats if hasattr(cats, "cats") else cats
         row["tags"] = [str(c) for c in cats_list]
+    if "X-CURODAV-SPACE" in event:
+        row["space"] = str(event.get("X-CURODAV-SPACE"))
     if "RRULE" in event:
         row["recurrence"] = event.get("RRULE").to_ical().decode()
     if "EXDATE" in event:

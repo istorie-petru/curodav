@@ -1,4 +1,5 @@
 {% from "_inputs.html" import text_input %}
+{% from "_settings_rows.html" import default_rows %}
 {% extends "base.html" %}
 {% block title %}Notifications - Settings{% endblock %}
 {% block content %}
@@ -13,6 +14,10 @@
 <div class="settings-hint settings-hint-error" data-dm-flash="error">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
+{% from "_section_row.html" import section_row %}
+{% call section_row('') %}Quiet hours{% endcall %}
+<div class="card">{{ default_rows(quiet_rows) }}</div>
+{% call section_row('') %}Push notifications{% endcall %}
 <div class="card push-settings" id="push-settings">
     <div class="settings-field-row">
         <span class="settings-field-label">Notifications on this device

@@ -85,7 +85,7 @@ class TestStandaloneGroups:
 
     def test_update_from_settings_stays_on_settings(self, conn):
         db.create_group(conn, "Uni")
-        resp = label_pages.update_group("Uni", color="gray", icon="", new_name="", members=[], members_submitted="",
+        resp = label_pages.update_group("Uni", color="gray", icon="", new_name="",
                                         request=_req("/groups/Uni/update", "http://testserver/settings/groups"),
                                         conn=conn)
         assert resp.headers["location"] == "/settings/groups"
@@ -123,11 +123,6 @@ class TestGroupModalsAndPages:
 
 
 class TestShelvesHaveNoProjectMode:
-    def test_shelf_form_has_a_deadline_and_no_role_or_auto_shelves(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
-        body = labels_router.edit_label_modal("Gym", _req("/settings/labels/Gym/edit"), conn=conn).body.decode()
-        assert 'name="deadline_date"' in body and 'name="role"' not in body and 'name="auto_labels"' not in body
-        assert "Edit shelf" in body
 
     def test_shelf_rows_have_no_convert_action(self, conn):
         db.upsert_label_config(conn, {"name": "Gym", "created_at": _now()})
@@ -138,19 +133,6 @@ class TestShelvesHaveNoProjectMode:
         resp = labels_router.create_label(new_name="Thesis", color="blue", icon="", label_group="", conn=conn)
         assert resp.headers["location"] == "/settings/labels"
         assert labels_router.projects_settings_redirect().headers["location"] == "/settings/tags"
-
-
-class TestModuleDropdowns:
-    def test_page_sections_and_show_in_are_dropdowns(self, conn):
-        db.upsert_label_config(conn, {"name": "Gym", "sidebar_pin": 1, "tasks_widget": 1, "agenda_widget": 0,
-                                      "contacts_widget": 0, "notebook_widget": 0, "created_at": _now()})
-        body = labels_router.edit_label_modal("Gym", _req("/settings/labels/Gym/edit"), conn=conn).body.decode()
-        assert 'data-ms-label="page"' not in body and 'data-ms-label="sections"' in body and 'data-ms-label="show in"' in body
-        assert '<span class="ms-summary">Tasks</span>' in body
-        assert '<span class="ms-summary">Sidebar</span>' in body
-        assert 'class="field-toggle"' not in body
-        assert re.search(r'name="sidebar_pin" value="1"[^>]*\bchecked', body)
-        assert not re.search(r'name="widget_pin" value="1"[^>]*\bchecked', body)
 
 
 class TestDuplicate:

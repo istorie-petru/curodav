@@ -95,9 +95,11 @@ def test_a_note_opened_directly_goes_back_to_its_folder(conn):
 def test_a_note_in_a_shelf_goes_back_to_that_folder(conn):
     from src.routers import notebook
 
+    db.ensure_group(conn, "Work")
+    db.upsert_label_config(conn, {"name": "Work", "label_group": "Work"})
     uid = db.upsert_notebook_document(conn, {"uid": "n3", "title": "Budget", "is_template": 0, "document_type": "full", "note_type": "",
                                              "content_json": "{}", "tags": ["Work"], "created_at": "2026-10-30T09:00:00", "updated_at": "2026-10-30T09:00:00"})
-    assert db.notebook_folder_of(conn, "n3") == ("label", "Work")
+    assert db.notebook_folder_of(conn, "n3") == ("space", "Work")
 
 
 def test_a_new_habit_form_starts_with_the_default_reminder(conn):
@@ -116,3 +118,21 @@ def test_the_tasks_tab_opens_the_chosen_view(conn):
     assert tasks.open_tasks(conn=conn).headers["location"] == "/tasks"
     app_defaults.put(conn, "tasks_view", "board")
     assert tasks.open_tasks(conn=conn).headers["location"] == "/tasks/board"
+
+
+def test_each_app_settings_page_shows_its_default_rows(conn):
+    from src.routers import defaults
+
+    assert [r["key"] for r in defaults.rows_for(conn, "calendar")] == ["calendar_view", "event_reminder", "event_length"]
+    assert [r["key"] for r in defaults.rows_for(conn, "tasks")] == ["tasks_view", "habit_reminder"]
+    assert [r["key"] for r in defaults.rows_for(conn, "notifications")] == ["quiet_start", "quiet_end"]
+    assert all(r["back"].startswith("/settings/") for r in defaults.rows_for(conn, "notebook") + defaults.folder_rows(conn))
+
+
+def test_a_dropdown_with_nothing_stored_shows_the_choice_that_applies(conn):
+    from src.routers import defaults
+
+    rows = {r["key"]: r for r in defaults.rows_for(conn, "calendar") + defaults.rows_for(conn, "tasks")}
+    assert rows["calendar_view"]["value"] == "fourweek" and rows["tasks_view"]["value"] == "list"
+    defaults.save_default(key="calendar_view", value="week", back="/settings/calendar", conn=conn)
+    assert {r["key"]: r for r in defaults.rows_for(conn, "calendar")}["calendar_view"]["value"] == "week"

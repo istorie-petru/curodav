@@ -1,24 +1,23 @@
 {% from "_empty_state.html" import empty_state %}
+{% from "_section_row.html" import section_row %}
 {% extends "base.html" %}
 {% block title %}Logs - Settings{% endblock %}
 {% block content %}
 {% from "_page_header_narrow.html" import page_header_narrow with context %}
 {{ page_header_narrow("Logs", "list") }}
+{% call section_row('') %}Log{% endcall %}
 <div class="card log-view" id="log-view">
-    <div class="segmented" role="group" aria-label="Log level">
-        {% for lv in levels %}<button type="button" class="seg-btn{% if lv == 'important' %} active{% endif %}" data-log-level="{{ lv }}">{{ lv | capitalize }}</button>{% endfor %}
-    </div>
     <div class="log-lines" id="log-lines" aria-live="off"></div>
     <div id="log-empty">{{ empty_state('No log lines at this level yet', icon_name='list', size='compact') }}</div>
 </div>
+{% call section_row('') %}Timings, last 7 days{% endcall %}
 <div class="card" id="timings">
-    <h2>Timings, last 7 days</h2>
     {% if timings %}
-    <table>
-        <thead><tr><th>Kind</th><th>Name</th><th>Calls</th><th>Average</th><th>Trend</th><th>Slowest</th><th>Slow</th></tr></thead>
+    <table class="entity-table settings-table">
+        <thead><tr><th class="col-name">Name</th><th class="col-meta col-opt-2">Kind</th><th class="col-num">Calls</th><th class="col-num col-opt-1">Average</th><th class="col-num col-opt-2">Trend</th><th class="col-num col-opt-1">Slowest</th><th class="col-num col-opt-2">Slow</th></tr></thead>
         <tbody>
         {% for t in timings %}
-        <tr><td>{{ t.kind }}</td><td>{{ t.name }}</td><td>{{ t.count }}</td><td>{{ t.average_ms }} ms</td><td>{{ t.trend }}</td><td>{{ t.max_ms }} ms</td><td>{{ t.slow }}</td></tr>
+        <tr><td class="col-name" title="{{ t.name }}"><span class="label-name">{{ t.name }}</span></td><td class="col-meta col-opt-2">{{ t.kind }}</td><td class="col-num">{{ t.count }}</td><td class="col-num col-opt-1">{{ t.average_ms }} ms</td><td class="col-num col-opt-2">{{ t.trend }}</td><td class="col-num col-opt-1">{{ t.max_ms }} ms</td><td class="col-num col-opt-2">{{ t.slow }}</td></tr>
         {% endfor %}
         </tbody>
     </table>

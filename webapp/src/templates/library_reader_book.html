@@ -13,7 +13,7 @@
 <div class="notebook-page-layout main-shell-body">
     <div class="notebook-page-main">
         <div class="reader-book" data-book-reader data-uid="{{ c.uid }}" data-file="{{ file_url }}" data-file-name="{{ file_name }}" data-kind="{{ kind }}" data-manga="{{ 'true' if manga else '' }}" data-ocr="{{ 'true' if ocr_available else '' }}"
-             data-reader='{{ reader | tojson }}' data-choices='{{ reader_choices | tojson }}' data-position='{{ position | tojson }}' data-annotations='{{ annotations | tojson }}' data-bookmarks='{{ bookmarks | tojson }}' data-lookups='{{ lookups | tojson }}' data-cite="{{ footnote | striptags }}" data-edition="{{ edition_uid }}" data-format="{{ file_format }}">
+             data-reader='{{ reader | tojson }}' data-choices='{{ reader_choices | tojson }}' data-position='{{ position | tojson }}' data-annotations='{{ annotations | tojson }}' data-bookmarks='{{ bookmarks | tojson }}' data-lookups='{{ lookups | tojson }}' data-cite="{{ footnote | striptags }}" data-edition="{{ edition_uid }}" data-format="{{ file_format }}" data-language="{{ book_language }}">
             <div class="reader-stage"><foliate-view id="book-view"></foliate-view></div>
             <p class="reader-error muted" data-reader-error hidden></p>
             <div class="reader-ocr" data-reader-ocr hidden><span>This PDF has no text, so it can't be searched or highlighted.</span>

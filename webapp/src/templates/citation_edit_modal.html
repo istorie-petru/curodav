@@ -74,12 +74,19 @@
                 {{ cfield('accessed', 'Accessed', 'webpage') }}
                 {{ details_end() }}
                 {{ details_start(title="Notes") }}
+                <input type="hidden" name="keywords_field" value="1" form="citation-form">
                 <div class="field">
-                    <label>Keywords</label>
-                    {{ text_input({'name': 'keywords', 'value': (c.keywords | join(', ') if c else ''), 'autocomplete': 'off'}) }}
+                    {% set _kw = (c.keywords if c else []) %}
+                    {% set ms_items = [] %}{% for k in (_kw + keyword_items) | unique %}{% set _ = ms_items.append({'uid': k, 'name': k}) %}{% endfor %}
+                    {% set ms_name = 'keywords' %}{% set ms_label = 'Keywords' %}{% set ms_mode = 'select' %}{% set ms_selected = _kw %}
+                    {% set ms_allow_new = true %}{% set ms_search_always = true %}{% set ms_wide = false %}{% set ms_form_id = 'citation-form' %}{% set ms_remote = '' %}
+                    {% include "_widget_list_multiselect.html" %}
                 </div>
-                {% set tag_type = 'media' %}{% set tag_uid = (c.uid if c else '') %}{% set tag_old = [] %}{% set ms_form_id = 'citation-form' %}
-                {% include "_tag_row.html" %}
+                <div class="field">
+                    {% set ms_mode = 'single' %}{% set ms_form_id = 'citation-form' %}{% set ms_name = 'space' %}{% set ms_label = 'Space' %}
+                    {% set ms_items = space_items %}{% set ms_selected = (c.space if c and c.space else '') %}{% set ms_wide = false %}{% set ms_remote = '' %}{% set ms_allow_new = false %}
+                    {% include "_widget_list_multiselect.html" %}
+                </div>
                 <div class="field field-wide" data-repeatable-rows-scope>
                     <div class="field-label-row">
                         <label>Other authors</label>
@@ -126,6 +133,10 @@
                                     current=(_sel.file_label if _sel and _sel.source == 'local' and _sel.file_state == 'ok' else none),
                                     current_url=(('/library/editions/' ~ _sel.uid ~ '/file') if _sel and _sel.source == 'local' and _sel.file_state == 'ok' else none),
                                     attrs={'class': 'edition-file-input'}) }}
+                </div>
+                <div data-edition-language{% if not _sel or _sel.source != 'local' %} hidden{% endif %}>
+                {% set _langs = [{'uid': '', 'name': "The book's own"}] %}{% for code, name in book_languages %}{% set _ = _langs.append({'uid': code, 'name': name}) %}{% endfor %}
+                {{ single('ed_language', 'Language', _langs, (_sel.language if _sel else '')) }}
                 </div>
                 <div class="field"><label>Publisher</label>{{ text_input({'name': 'ed_publisher', 'value': (_sel.publisher if _sel else '')}) }}</div>
                 <div class="field"><label>Year</label>{{ text_input({'name': 'ed_year', 'value': (_sel.year if _sel else '')}) }}</div>

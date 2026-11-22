@@ -7,7 +7,7 @@
 {%- endmacro %}
 {% macro quick_add_title() -%}
 {% set _qa_label = label.name if (active_tab == 'label' and label is defined and label) else '' -%}
-{% if _qa_label %}New item in {{ _qa_label }}{% else %}{{ {'contacts': 'New contact', 'labels': 'New shelf'}.get(active_tab, 'New task or event') }}{% endif %}
+{% if _qa_label %}New item in {{ _qa_label }}{% else %}{{ {'contacts': 'New contact', 'labels': 'New tag'}.get(active_tab, 'New task or event') }}{% endif %}
 {%- endmacro %}
 {# The one Add control of a page, in the sidebar above Settings and in the phone bar. A page sets `page_add` at the top of its template
    ({'href': ..., 'label': ...}, or {'post': url, 'fields': {...}, 'label': ...} for an add that needs no window); a page that sets nothing

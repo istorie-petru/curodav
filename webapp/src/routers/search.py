@@ -64,10 +64,8 @@ def _notebook_pages(conn, q: str, limit: int = 5) -> list[dict]:
     notes = [{"title": d["title"] or "Untitled", "url": f"/notebook/{d['uid']}", "subtitle": "Note"}
              for d in search_index.search_notes(conn, q, limit)]
     folders = db.list_notebook_folders(conn)
-    named = [f for kind in ("projects", "labels") for f in folders[kind] if f.get("kind") != "unfiled" and q_lower in f["name"].lower()]
-    kinds = {"projects": "project", "labels": "label"}
-    found = [{"title": f["name"], "url": f"/notebook/folder?kind={kinds[k]}&name={quote(f['name'])}", "subtitle": "Notebook folder"}
-             for k in ("projects", "labels") for f in folders[k] if f in named]
+    named = [f for kind in ("spaces",) for f in folders[kind] if f.get("kind") != "unfiled" and q_lower in f["name"].lower()]
+    found = [{"title": f["name"], "url": f"/notebook/folder?kind=space&name={quote(f['name'])}", "subtitle": "Notebook folder"} for f in named]
     return notes + found[:limit]
 
 

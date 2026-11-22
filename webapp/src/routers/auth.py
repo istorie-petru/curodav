@@ -110,6 +110,9 @@ def login_submit(
 
 @router.post("/logout")
 def logout(request: Request, conn=Depends(get_db)):
+    from .. import vault_session
+
+    vault_session.lock_all()
     auth.end_session(conn, auth.session_id(request.cookies.get(auth.SESSION_COOKIE)))
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(
@@ -120,6 +123,9 @@ def logout(request: Request, conn=Depends(get_db)):
 
 @router.post("/logout-everywhere")
 def logout_everywhere(request: Request, conn=Depends(get_db)):
+    from .. import vault_session
+
+    vault_session.lock_all()
     settings = request.app.state.settings
     secret = auth.end_all_sessions(settings, conn)
     state = getattr(request.app, "state", None)

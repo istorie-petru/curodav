@@ -31,19 +31,20 @@ def header_views(kind: str, active: str, label: str = "", day: str = "", agenda:
 
 SETTINGS_GROUPS = [
     {"name": "Account", "icon": "user-check", "items": [("Profile", "/settings/your-profile"), ("Notifications", "/settings/notifications")]},
-    {"name": "Preferences", "icon": "sun", "items": [("General", "/settings/general"), ("Defaults", "/settings/defaults"), ("Appearance", "/settings/appearance")]},
-    {"name": "Organise", "icon": "tag", "items": [("Shelves", "/settings/labels"), ("Tags", "/settings/tags"), ("Spaces", "/settings/groups"), ("Calibre", "/settings/calibre")]},
-    {"name": "Modules", "icon": "file-text", "items": [("Notebook", "/settings/notebook"), ("Library", "/settings/library"), ("Finance", "/settings/finance-accounts"), ("Calendar", "/settings/calendar")]},
+    {"name": "Preferences", "icon": "sun", "items": [("General", "/settings/general"), ("Appearance", "/settings/appearance")]},
+    {"name": "Modules", "icon": "puzzle", "items": [("Modules", "/settings/modules")]},
+    {"name": "Apps", "icon": "layout", "items": [("Calendar", "/settings/calendar"), ("Tasks", "/settings/tasks")]},
+    {"name": "Organise", "icon": "tag", "items": [("Tags", "/settings/labels"), ("Spaces", "/settings/groups")]},
     {"name": "System", "icon": "database", "items": [("Data", "/settings/data-maintenance"), ("Published lists", "/published-lists"), ("Backups", "/settings/backups"), ("Logs", "/settings/logs"), ("API access", "/settings/api-access")]},
 ]
 
 
 def current_settings_groups() -> list[dict]:
-    """SETTINGS_GROUPS with the Settings entries of the enabled modules added under Modules."""
+    """SETTINGS_GROUPS with the Settings page of each enabled module added under Apps."""
     from . import modules
 
     extra = modules.settings_items()
-    return [{**g, "items": [*g["items"], *extra]} if g["name"] == "Modules" else g for g in SETTINGS_GROUPS]
+    return [{**g, "items": [*g["items"], *extra]} if g["name"] == "Apps" else g for g in SETTINGS_GROUPS]
 
 
 def settings_group(request) -> dict | None:

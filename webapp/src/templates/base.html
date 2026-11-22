@@ -112,10 +112,12 @@
         <a href="/" data-tab="dashboard" class="tab-btn {% if active_tab == 'dashboard' %}active{% endif %}" title="Home" aria-label="Home">{{ icon('home') }}<span>Home</span></a>
         <a href="/calendar/fourweek" data-tab="calendar" class="tab-btn {% if active_tab in ('calendar', 'calendar_week') %}active{% endif %}" title="Calendar" aria-label="Calendar">{{ icon('calendar') }}<span>Calendar</span></a>
         <a href="/tasks/open" data-tab="tasks" class="tab-btn {% if active_tab in ('tasks', 'habits') %}active{% endif %}" title="Tasks" aria-label="Tasks">{{ icon('check-square') }}<span>Tasks</span></a>
-        <a href="/notebook" data-tab="notebook" class="tab-btn {% if active_tab == 'notebook' %}active{% endif %}" title="Notebook" aria-label="Notebook">{{ icon('notebook') }}<span>Notebook</span></a>
-        <a href="/library" data-tab="library" class="tab-btn {% if active_tab == 'library' %}active{% endif %}" title="Library" aria-label="Library">{{ icon('library') }}<span>Library</span></a>
-        <a href="/finance" data-tab="finance" class="tab-btn {% if active_tab == 'finance' %}active{% endif %}" title="Finance" aria-label="Finance">{{ icon('dollar-sign') }}<span>Finance</span></a>
+        {% if module_on('notebook') %}<a href="/notebook" data-tab="notebook" class="tab-btn {% if active_tab == 'notebook' %}active{% endif %}" title="Notebook" aria-label="Notebook">{{ icon('notebook') }}<span>Notebook</span></a>{% endif %}
+        {% if module_on('library') %}<a href="/library" data-tab="library" class="tab-btn {% if active_tab == 'library' %}active{% endif %}" title="Library" aria-label="Library">{{ icon('library') }}<span>Library</span></a>{% endif %}
+        {% if module_on('finance') %}<a href="/finance" data-tab="finance" class="tab-btn {% if active_tab == 'finance' %}active{% endif %}" title="Finance" aria-label="Finance">{{ icon('dollar-sign') }}<span>Finance</span></a>{% endif %}
         <a href="/contacts" data-tab="contacts" class="tab-btn {% if active_tab == 'contacts' %}active{% endif %}" title="Contacts" aria-label="Contacts">{{ icon('address-book') }}<span>Contacts</span></a>
+        {% if module_on('accounts') %}<a href="/accounts" data-tab="accounts" class="tab-btn {% if active_tab == 'accounts' %}active{% endif %}" title="Accounts" aria-label="Accounts">{{ icon('lock') }}<span>Accounts</span></a>{% endif %}
+        {% if module_on('academic') %}<a href="/university" data-tab="university" class="tab-btn {% if active_tab == 'university' %}active{% endif %}" title="{{ university_app_name(request) }}" aria-label="{{ university_app_name(request) }}">{{ icon('graduation-cap') }}<span>{{ university_app_name(request) }}</span></a>{% endif %}
         {% set _sb_groups = sidebar_groups(request) %}
         {% if _sb_groups %}
         <div class="tab-separator" role="separator" aria-label="Spaces"></div>
@@ -126,37 +128,25 @@
         {# namespace(): child_active is written inside the loop and read after it. #}
         {% set ns = namespace(child_active=false, member_active=false) %}
         {% for child in g.children %}
-          {% if request.url.path == (child.path or '/labels/' ~ child.name) %}{% set ns.child_active = true %}{% endif %}
+          {% if request.url.path == child.path and request.query_params.get('tag') == child.name %}{% set ns.child_active = true %}{% endif %}
         {% endfor %}
-        {% for m in g.labels %}
-          {% if request.url.path == '/labels/' ~ m.name %}{% set ns.member_active = true %}{% endif %}
-        {% endfor %}
-        {% set _g_active = request.url.path == group_href or (ns.member_active and not ns.child_active) %}
+        {% set _g_active = request.url.path == group_href and not ns.child_active %}
         <div class="sidebar-tree-item {% if has_children %}has-children{% endif %}" data-space-name="{{ g.name }}">
           <div class="sidebar-tree-row">
             <a href="{{ group_href }}" class="tab-btn tab-btn-space {% if _g_active %}active{% elif ns.child_active %}has-active-child{% endif %}" title="{{ g.name }}" aria-label="{{ g.name }}"><span class="sidebar-group-glyph" data-style="color: var(--cal-text-{{ g.color or 'gray' }})">{{ icon(g.icon or 'layers') }}</span><span>{{ g.name }}</span></a>
             {% if has_children %}
-            <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ g.name }} shelves">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
+            <button type="button" class="sidebar-tree-toggle" aria-expanded="{{ 'true' if ns.child_active else 'false' }}" aria-label="Toggle {{ g.name }} tags">{{ icon('chevron-right', 'sidebar-tree-chevron') }}</button>
             {% endif %}
           </div>
           {% if has_children %}
           <div class="sidebar-tree-children">
             {% for child in g.children %}
             {% set child_href = child.href or '/labels/' ~ child.name %}
-            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == (child.path or child_href) %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or ('folder' if child.is_project else 'tag')) }}<span>{{ child.abbreviation or child.name }}</span></a>
+            <a href="{{ child_href }}" class="tab-btn tab-btn-child {% if request.url.path == child.path and request.query_params.get('tag') == child.name %}active{% endif %}" title="{{ child.name }}">{{ icon(child.icon or 'tag') }}<span>{{ child.abbreviation or child.name }}</span></a>
             {% endfor %}
           </div>
           {% endif %}
         </div>
-        {% endfor %}
-        {% endif %}
-        {% set _sb_pinned = sidebar_pinned(request) %}
-        {% if _sb_pinned %}
-        <div class="tab-separator" role="separator" aria-label="Pinned"></div>
-        <div class="sidebar-section-label" aria-hidden="true">Pinned</div>
-        {% for p in _sb_pinned %}
-        {% set pinned_href = '/labels/' ~ p.name %}
-        <a href="{{ pinned_href }}" class="tab-btn tab-btn-project {% if request.url.path == pinned_href %}active{% endif %}" title="{{ p.name }}">{{ icon(p.icon or ('folder' if p.is_project else 'tag')) }}<span>{{ p.abbreviation or p.name }}</span></a>
         {% endfor %}
         {% endif %}
         <div class="spacer"></div>

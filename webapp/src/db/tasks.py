@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from .. import habit_heatmap
+from .. import tags as tag_store
 
 from .core import ENTITY_SYNC_FIELDS, _hours_between, _row_columns, _row_to_dict, get_app_meta, set_app_meta, set_field_hlc
 from .labels import _attach_tags, _attach_tags_bulk, _reject_multiple_project_labels, list_object_ids_for_label, set_object_labels
@@ -46,6 +47,7 @@ def upsert_task(
     if record_server_write:
         previous = _row_columns(conn, "tasks", str(data.get("uid")), _TASK_SYNC_COLUMNS)
     tags = data.pop("tags", None)
+    space = data.pop("space", None)
     # Validated before anything is written (not just before set_object_labels
     # further down) so a rejected label set never leaves a partial write --
     # the task row's other columns and its labels are kept consistent by
@@ -101,6 +103,8 @@ def upsert_task(
     )
     if tags is not None:
         set_object_labels(conn, "task", data["uid"], tags)
+    if space is not None:
+        tag_store.apply_space(conn, "task", data["uid"], space)
     # 1.4 (Work allocations, § Task & calendar semantics): "editing the task
     # updates the representation of its associated work allocations where
     # appropriate" -- keep every linked work-allocation event's title equal
@@ -334,8 +338,8 @@ def _tag_overlap_uids(conn: sqlite3.Connection, object_type: str, other_type: st
     where = f" AND {table}.start_at >= ?" if since and other_type == "event" else ""
     args = [other_type, *tags] + ([since] if where else []) + [limit]
     rows = conn.execute(
-        f"SELECT DISTINCT {table}.uid, {order} AS o FROM {table} JOIN object_tags ot ON ot.object_type = ? AND ot.object_id = {table}.uid "
-        f"WHERE ot.tag_name IN ({marks}){where} ORDER BY o LIMIT ?",
+        f"SELECT DISTINCT {table}.uid, {order} AS o FROM {table} JOIN object_labels ot ON ot.object_type = ? AND ot.object_id = {table}.uid "
+        f"WHERE ot.label_name IN ({marks}){where} ORDER BY o LIMIT ?",
         args,
     ).fetchall()
     return [r["uid"] for r in rows]

@@ -9,7 +9,7 @@
     function bindBulk() {
         const base = { tableId: "taxonomy-table" };
         if (view === "labels") {
-            const noun = "shelf";
+            const noun = "tag";
             window.CCBulkSelect.init(Object.assign(base, {
                 barId: "labels-bulk-bar", countId: "labels-bulk-count", clearId: "labels-bulk-clear",
                 deleteButtonId: "labels-bulk-delete", deleteUrl: "/settings/labels/bulk-delete", changeType: "label",

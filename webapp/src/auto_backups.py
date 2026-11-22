@@ -29,10 +29,10 @@ from .log import get_logger
 logger = get_logger(__name__)
 
 DAILY = {"morning": "10:00", "evening": "18:00"}
-KINDS = {"morning": "Morning", "evening": "Evening", "start": "Server start", "restore": "Before restoring"}
+KINDS = {"morning": "Morning", "evening": "Evening", "start": "Server start", "restore": "Before restoring", "manual": "Made by hand"}
 KEEP_DAYS = 7
 KEEP_START = 5
-_NAME = re.compile(r"^curodav-(\d{8})-(\d{4})-(morning|evening|start|restore)\.sqlite\.gz$")
+_NAME = re.compile(r"^curodav-(\d{8})-(\d{4})-(morning|evening|start|restore|manual)\.sqlite\.gz$")
 _lock = threading.Lock()
 
 

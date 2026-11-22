@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import text_input, textarea_input %}
+{% from "_action_menu.html" import action_menu with context %}
+{% block title %}{{ e.title if e else 'New entry' }}{% endblock %}
+{% block content %}
+{# An entry is its title, type and space, then its fields: one labelled value each, in the type's order (Settings, Accounts).
+   A field's menu hides or shows it (a hidden field is stored protected) and removes it. #}
+{% macro field_row(i, f) %}
+<div class="field field-wide accounts-field" id="acc-field-{{ i }}" data-row data-kind="{{ f.kind }}">
+    <input type="hidden" name="field_idx" value="{{ i }}"><input type="hidden" name="field_key_{{ i }}" value="{{ f.name }}">
+    <input type="hidden" name="field_secret_{{ i }}" value="{{ '1' if f.hidden else '0' }}" data-acc-hidden>
+    <label>{{ f.name }}</label>
+    <div class="input-with-action">
+    {% if f.kind == 'long text' %}{{ textarea_input({'name': 'field_value_' ~ i, 'class': 'accounts-masked' if f.hidden else none, 'autocomplete': 'off', 'aria-label': f.name}, f.value) }}
+    {% else %}{{ text_input({'name': 'field_value_' ~ i, 'value': f.value, 'class': 'accounts-masked' if f.hidden else none, 'autocomplete': 'off', 'aria-label': f.name}) }}{% endif %}
+        {{ action_menu(([{'label': 'Generate a password', 'icon': 'key', 'button': true, 'attrs': {'data-acc-generate': 'acc-field-' ~ i}}] if f.name in ('Password', '__NAME__') else []) + [
+            {'label': 'Show' if f.hidden else 'Hide', 'icon': 'eye-off' if f.hidden else 'eye', 'button': true, 'attrs': {'data-acc-eye': 'acc-field-' ~ i}},
+            {'label': 'Remove', 'icon': 'trash', 'danger': true, 'button': true, 'attrs': {'data-acc-remove': 'acc-field-' ~ i}},
+        ], aria_label='Actions for ' ~ f.name) }}
+    </div>
+</div>
+{% endmacro %}
+{% call modal(kind="form", title=(e.title if e else 'New entry'), size="medium", form='accounts-entry-form', creating=(not e)) %}
+<form method="post" action="/accounts/entry{% if e %}/{{ e.uuid|urlencode }}{% endif %}" id="accounts-entry-form" autocomplete="off" data-follow-redirect
+      data-acc-kinds="{{ kinds|tojson|forceescape }}">
+    <div class="field-grid">
+        <div class="field field-wide"><label>Title</label>{{ text_input({'name': 'title', 'value': e.title if e else '', 'required': true, 'autofocus': true}) }}</div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'accounts-entry-form' %}{% set ms_name = 'type' %}{% set ms_label = 'Type' %}
+            {% set ms_items = [] %}{% for t in types %}{% set _ = ms_items.append({'uid': t.key, 'name': t.name}) %}{% endfor %}
+            {% set ms_selected = type.key %}{% set ms_wide = false %}{% set ms_remote = '' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field">
+            {% set ms_mode = 'single' %}{% set ms_form_id = 'accounts-entry-form' %}{% set ms_name = 'space' %}{% set ms_label = 'Space' %}
+            {% set ms_items = space_items %}{% set ms_selected = space %}{% set ms_wide = false %}{% set ms_remote = '' %}
+            {% include '_widget_list_multiselect.html' %}
+        </div>
+        <div class="field-grid field-wide accounts-fields" id="accounts-field-rows" data-rows-host data-rows-template="accounts-field-template">
+            {% for f in rows %}{{ field_row(loop.index, f) }}{% endfor %}
+        </div>
+        <div class="field field-wide"><label>New field</label>
+            <div class="input-with-action">{{ text_input({'name': 'new_field', 'form': 'none', 'data-acc-new-field': true, 'autocomplete': 'off'}) }}
+                <button type="button" class="icon-btn" data-acc-add-field title="Add the field" aria-label="Add the field">{{ icon('plus', 'icon-sm') }}</button></div>
+        </div>
+        <template id="accounts-field-template">{{ field_row('__IDX__', {'name': '__NAME__', 'value': '', 'hidden': false, 'kind': 'text'}) }}</template>
+        <template id="accounts-field-template-long">{{ field_row('__IDX__', {'name': '__NAME__', 'value': '', 'hidden': false, 'kind': 'long text'}) }}</template>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

@@ -11,6 +11,8 @@
                 {% for k, v in (it.fields or {}).items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
                 <button type="submit" class="action-menu-item{% if it.danger %} danger{% endif %}" role="menuitem">{{ icon(it.icon, 'icon-sm') }} {{ it.label }}</button>
             </form>
+            {% elif it.button %}
+            <button type="button" class="action-menu-item{% if it.danger %} danger{% endif %}" role="menuitem"{% for k, v in (it.attrs or {}).items() %} {{ k }}="{{ v }}"{% endfor %}>{{ icon(it.icon, 'icon-sm') }} <span>{{ it.label }}</span></button>
             {% else %}
             <a class="action-menu-item{% if it.danger %} danger{% endif %}" role="menuitem" href="{{ it.href }}"{% if it.modal %} data-modal{% endif %}>{{ icon(it.icon, 'icon-sm') }} {{ it.label }}</a>
             {% endif %}

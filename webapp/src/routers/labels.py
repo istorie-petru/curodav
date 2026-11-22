@@ -72,44 +72,6 @@ def _clean_description(description) -> str | None:
     return description.strip()[:500] or None
 
 
-def _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
-                 notebook_widget="", sidebar_pin="", widget_pin="") -> dict:
-    """labels-as-modules slice b: the label form's Deadline and
-        Page fields as label_config columns. Returns {} when the form didn't
-        carry them (no `page_fields` marker), so an older caller that posts
-        without them leaves the stored values alone. Checkboxes send nothing
-        when unticked, so absent means off. The isinstance guards cover direct
-        (non-request) calls from tests, where an unset param is still FastAPI's
-        Form marker object.
-    """
-    def s(v):
-        return v.strip() if isinstance(v, str) else ""
-
-    if s(page_fields) != "1":
-        return {}
-    deadline = s(deadline_date)[:10] or None
-    if deadline:
-        try:
-            date.fromisoformat(deadline)
-        except ValueError:
-            raise HTTPException(400, "Deadline must be a date (YYYY-MM-DD).")
-
-    def on(v):
-        return 1 if s(v) in ("1", "true", "on") else 0
-
-    return {
-        "has_deadline": 1 if deadline else 0,
-        "deadline_date": deadline,
-        "page_type": s(page_type) if s(page_type) in db.page_types() else "sections",
-        "agenda_widget": on(agenda_widget),
-        "tasks_widget": on(tasks_widget),
-        "contacts_widget": on(contacts_widget),
-        "notebook_widget": on(notebook_widget),
-        "sidebar_pin": on(sidebar_pin),
-        "widget_pin": on(widget_pin),
-    }
-
-
 COLORS = [
     "red", "coral", "orange", "amber", "yellow", "lime", "sage", "green", "mint", "teal", "cyan", "sky",
     "blue", "indigo", "violet", "purple", "plum", "magenta", "rose", "pink", "sand", "brown", "gray", "slate",
@@ -279,43 +241,29 @@ def _labels_context(conn, request: Request, kind: str = "labels") -> dict:
         "active_tab": "labels",
         "crumbs": [{"url": "/settings", "name": "Settings"}],
         "kind": "labels",
-        "noun": "shelf",
+        "noun": "tag",
         "new_url": "/settings/labels/new",
         "page_icon": "tag",
         "group_default_icon": db.GROUP_DEFAULT_ICON,
-        "title": "Shelves",
+        "title": "Tags",
         "labels": labels,
         "has_labels": bool(labels),
         "show": show,
     }
 
 
-async def _tag_rows(request: Request) -> list[dict]:
-    return tags.parse_rows(await request.form())
-
-
-def _rows_of(tag_rows) -> list[dict]:
-    """Direct calls (tests, internal callers) leave the Depends default in place; that means no tag rows."""
-    return tag_rows if isinstance(tag_rows, list) else []
-
-
 @router.get("/{name}/edit")
 def edit_label_modal(name: str, request: Request, conn=Depends(get_db)):
     """The label edit modal -- uses the unified label_form_modal.html."""
     cfg = db.effective_label_config(conn, name)
-    banner = db.get_page_banner(conn, name)
     return templates.TemplateResponse(
         "label_form_modal.html",
         {
             "request": request,
             "l": cfg,
-            "managed": modules.get(cfg["managed_by"]) if cfg.get("managed_by") else None,
-            "discipline_shelf": tags.discipline_shelf(conn),
             "colors": COLORS,
             "icon_groups": icon_groups_for(cfg.get("icon")),
             "group_options": [g["name"] for g in db.list_groups(conn)],
-            "label_tags": tags.tags_of_label(conn, name),
-            "banner": banner,
         },
     )
 
@@ -340,60 +288,33 @@ def update_label(
     icon: str = Form(""),
     label_group: str = Form(""),
     description: str = Form(""),
-    page_fields: str = Form(""),
-    deadline_date: str = Form(""),
-    page_type: str = Form(""),
-    agenda_widget: str = Form(""),
-    tasks_widget: str = Form(""),
-    contacts_widget: str = Form(""),
-    notebook_widget: str = Form(""),
-    sidebar_pin: str = Form(""),
-    widget_pin: str = Form(""),
-    tag_rows: list[dict] = Depends(_tag_rows),
-    request: Request = None,
     conn=Depends(get_db),
 ):
     new_name = (new_name or "").strip() or name
-    owner = tags.managed_by(conn, name)
-    tag_rows = [] if owner else _rows_of(tag_rows)  # a managed shelf keeps its tags: the module adds, removes and renames them
-    error = tags.validate_rows(conn, new_name, tag_rows)
-    if error:
-        raise HTTPException(400, error)
-    icon = (icon or "").strip() or None
-    page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
-                        notebook_widget, sidebar_pin, widget_pin)
-
-    with tags.managed_writes(owner) if owner else contextlib.nullcontext():
-        return _update_label_rows(conn, request, name, new_name, owner, tag_rows, color, icon, label_group, description, page)
-
-
-def _update_label_rows(conn, request, name, new_name, owner, tag_rows, color, icon, label_group, description, page):
-    renamed_from = None
+    space = _required_space(conn, label_group)
+    current = tags.get_tag(conn, name)
+    if current and current["space"].lower() != space.lower():
+        problem = tags.move_error(conn, name, space)
+        if problem:
+            raise HTTPException(400, problem)
+        tags.move_tag(conn, name, space)
     if new_name != name:
         _reject_reserved_label_name(new_name)
+        if tags.get_tag(conn, new_name) and new_name.lower() != name.lower():
+            raise HTTPException(400, "A tag with that name already exists")
         db.rename_label(conn, name, new_name)
-        renamed_from, name = name, new_name
-
+        name = new_name
     existing = db.get_label_config(conn, name) or {}
-    row = {
-        "name": name,
-        "color": color if color in COLORS else "blue",
-        "icon": icon,
-        "label_group": _clean_group(label_group),
-        "description": _clean_description(description),
-        "created_at": existing.get("created_at") or _now(),
-        **page,
-    }
-    # archived_at is left alone: archiving is its own explicit action on
-    # the label's page (routers/label_pages.py), not a side effect of
-    # changing the role.
-    db.upsert_label_config(conn, row)
-    tags.apply_rows(conn, name, tag_rows, COLORS)
-    if renamed_from and request is not None:
-        ref = urlparse(request.headers.get("referer") or "")
-        if unquote(ref.path) == f"/labels/{renamed_from}":
-            return RedirectResponse(url=f"/labels/{quote(name, safe='')}", status_code=303)
+    db.upsert_label_config(conn, {
+        "name": name, "color": color if color in COLORS else "blue", "icon": (icon or "").strip() or None, "label_group": space,
+        "description": _clean_description(description), "created_at": existing.get("created_at") or _now()})
     return RedirectResponse(url="/settings/labels", status_code=303)
+
+
+def _required_space(conn, label_group) -> str:
+    """Every tag sits in a space."""
+    space = (label_group or "").strip() or tags.OTHER_SPACE
+    return db.ensure_group(conn, space) or space
 
 
 @router.post("/{name}/rename")
@@ -453,7 +374,6 @@ def new_label_modal(request: Request, return_to: str = "", copy: str = "", conn=
             "icon_groups": icon_groups_for(prefill.get("icon")) if prefill else LABEL_ICON_GROUPS,
             "group_options": [g["name"] for g in db.list_groups(conn)],
             "return_to": return_to,
-            "label_tags": [],
         },
     )
 
@@ -465,48 +385,18 @@ def create_label(
     icon: str = Form(""),
     label_group: str = Form(""),
     description: str = Form(""),
-    page_fields: str = Form(""),
-    deadline_date: str = Form(""),
-    page_type: str = Form(""),
-    agenda_widget: str = Form(""),
-    tasks_widget: str = Form(""),
-    contacts_widget: str = Form(""),
-    notebook_widget: str = Form(""),
-    sidebar_pin: str = Form(""),
-    widget_pin: str = Form(""),
-    tag_rows: list[dict] = Depends(_tag_rows),
     conn=Depends(get_db),
 ):
-    """Create a new label with zero items attached -- labels are first-class
-        organizational tools, not tied to any object.
-    """
+    """Creates a tag in a space."""
     new_name = new_name.strip()
     if not new_name:
-        raise HTTPException(400, "Shelf name is required")
+        raise HTTPException(400, "Tag name is required")
     _reject_reserved_label_name(new_name)
-
-    icon = (icon or "").strip() or None
-    page = _page_fields(page_fields, deadline_date, page_type, agenda_widget, tasks_widget, contacts_widget,
-                        notebook_widget, sidebar_pin, widget_pin)
-
-    row = {
-        "name": new_name,
-        "color": color if color in COLORS else "blue",
-        "icon": icon,
-        "label_group": _clean_group(label_group),
-        "description": _clean_description(description),
-        "created_at": _now(),
-        **page,
-    }
     if tags.name_taken(conn, new_name):
-        raise HTTPException(400, "A tag or shelf with that name already exists")
-    tag_rows = _rows_of(tag_rows)
-    error = tags.validate_rows(conn, new_name, tag_rows)
-    if error:
-        raise HTTPException(400, error)
-    db.upsert_label_config(conn, row)
-    tags.add_default_tag(conn, new_name, row["color"], icon or "")
-    tags.apply_rows(conn, new_name, tag_rows, COLORS)
+        raise HTTPException(400, "A tag with that name already exists")
+    db.upsert_label_config(conn, {
+        "name": new_name, "color": color if color in COLORS else "blue", "icon": (icon or "").strip() or None,
+        "label_group": _required_space(conn, label_group), "description": _clean_description(description), "created_at": _now()})
     return RedirectResponse(url="/settings/labels", status_code=303)
 
 
@@ -528,7 +418,7 @@ async def bulk_delete_labels(request: Request, conn=Depends(get_db)):
     payload = await request.json()
     names = payload.get("uids") or []
     if not names:
-        return JSONResponse({"error": "no shelves selected"}, status_code=400)
+        return JSONResponse({"error": "no tags selected"}, status_code=400)
     for name in names:
         db.delete_label_config(conn, name)
     return JSONResponse({"ok": True, "count": len(names)})
@@ -563,7 +453,7 @@ def bulk_merge_labels(uids: list[str] = Form([]), dest_name: str = Form(...), co
     skipping here avoids the pointless call)."""
     dest_name = (dest_name or "").strip()
     if not dest_name:
-        raise HTTPException(400, "Choose a shelf to merge into")
+        raise HTTPException(400, "Choose a tag to merge into")
     _reject_reserved_label_name(dest_name)
     for name in uids:
         if name and name != dest_name:
@@ -575,14 +465,10 @@ def bulk_merge_labels(uids: list[str] = Form([]), dest_name: str = Form(...), co
 def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
     """Bulk-select "Edit": color, group, end date and archive state for every selected label or project."""
     names = [n for n in uids.split(",") if n]
-    noun = "shelf"
+    noun = "tag"
     fields = [
         {"name": "color", "label": "Color", "kind": "select", "options": [(c, c.title()) for c in COLORS]},
-        {"name": "label_group", "label": "Group", "kind": "select",
-         "options": [(_NO_GROUP, "No group")] + [(g["name"], g["name"]) for g in db.list_groups(conn)]},
-        {"name": "end_date", "label": "Deadline", "kind": "date"},
-        {"name": "clear_end", "label": "Remove deadline", "kind": "select",
-         "options": [("1", "Remove it")]},
+        {"name": "label_group", "label": "Space", "kind": "select", "options": [(g["name"], g["name"]) for g in db.list_groups(conn)]},
         {"name": "archive", "label": "Archive", "kind": "select", "options": [("archive", "Archive"), ("restore", "Restore")]},
     ]
     return templates.TemplateResponse(
@@ -593,29 +479,19 @@ def bulk_edit_modal(uids: str, request: Request, conn=Depends(get_db)):
     )
 
 
-_NO_GROUP = "__none__"
-
 
 @router.post("/bulk-edit")
 def bulk_edit_labels(
     uids: list[str] = Form([]),
     color: str = Form(""),
     label_group: str = Form(""),
-    end_date: str = Form(""),
-    clear_end: str = Form(""),
     archive: str = Form(""),
     conn=Depends(get_db),
 ):
     # Direct (non-request) calls leave an unset Form param as FastAPI's marker object, so non-strings count as blank.
-    color, label_group, end_date, clear_end, archive = (v if isinstance(v, str) else "" for v in (color, label_group, end_date, clear_end, archive))
+    color, label_group, archive = (v if isinstance(v, str) else "" for v in (color, label_group, archive))
     if color and color not in COLORS:
         raise HTTPException(400, f"unknown color '{color}'")
-    end_date = end_date.strip()[:10]
-    if end_date:
-        try:
-            date.fromisoformat(end_date)
-        except ValueError:
-            raise HTTPException(400, "End date must be a date (YYYY-MM-DD).")
     for name in uids:
         # A label that is only in use (no settings row yet) gets one.
         config = db.get_label_config(conn, name) or {"name": name, "created_at": _now()}
@@ -623,11 +499,7 @@ def bulk_edit_labels(
         if color:
             row["color"] = color
         if label_group:
-            row["label_group"] = None if label_group == _NO_GROUP else _clean_group(label_group)
-        if end_date or clear_end:
-            value = end_date or None
-            row["has_deadline"] = 1 if value else 0
-            row["deadline_date"] = value
+            row["label_group"] = _required_space(conn, label_group)
         if len(row) > 2:
             db.upsert_label_config(conn, row)
         if archive == "archive":

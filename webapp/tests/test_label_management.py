@@ -106,11 +106,6 @@ class TestModalHeaderAppearanceButtons:
         # is shared with Settings > Appearance's Accent color, which reads
         # a different palette -- see _look_picker.html's `dot_var_prefix`).
         assert '<span class="look-preview" data-style="--habit-accent:var(--cal-accent-yellow);">' in body and 'href="#icon-shopping-cart"' in body
-        row = body[body.index('class="look-row"'):]
-        row = row[:row.index('class="field', 10)] if 'class="field' in row[10:] else row
-        assert '/banners/editor?scope=Groceries' in row and 'class="look-side-btn"' in row
-        assert 'href="#icon-upload"' in row
-        assert 'from_modal=1' in body
 
     def test_edit_modal_body_no_longer_has_inline_color_icon_banner_fields(self, conn):
         db.upsert_label_config(conn, {"name": "Groceries", "color": "yellow", "created_at": _now()})
@@ -465,80 +460,6 @@ class TestSettingsDeleteRemovesConfig:
         db.delete_label_config(conn, "Solo")
         assert db.get_label_config(conn, "Solo") is None
         assert "Solo" not in {l["name"] for l in db.list_labels(conn)}
-
-
-# --------------------------------------------------------------------- #
-# Generated Space page
-# --------------------------------------------------------------------- #
-
-
-class TestGeneratedSpacePage:
-    def test_plain_label_page_shows_its_own_kanban_task_and_agenda_event(self, conn):
-        # 2026-09-16 (direct request: "plain labels should generate pages
-        # like projects, with agenda and kanban, not dashboards") -- a
-        # plain label's page is no longer the widget-grid dashboard (no
-        # more `is_space`/`tasks`/`events` context keys), it's the same
-        # Kanban+Agenda shape a Project's page uses: a task tagged with
-        # the label lands in its status column on the board, a future
-        # event tagged with it lands in the Agenda list.
-        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
-        db.upsert_task(conn, {"uid": "t1", "title": "HW", "description": "", "status": "active",
-                               "tags": ["CS101"], "created_at": _now()})
-        future = (date.today() + timedelta(days=1)).isoformat()
-        db.upsert_event(conn, {"uid": "e1", "title": "Lecture", "description": "", "status": "active",
-                                "all_day": 0, "start_at": f"{future}T10:00:00", "tags": ["CS101"], "created_at": _now()})
-        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
-        assert {t["uid"] for t in resp.context["columns"]["active"]} == {"t1"}
-        assert {e["uid"] for e in resp.context["agenda_items"]} == {"e1"}
-
-    def test_plain_label_page_shows_contacts_tagged_with_it(self, conn):
-        # 2026-09-16 (direct request: "the same plain label page should
-        # also show below the agenda and above the kanban a contacts list
-        # widget filtered for that label") -- every contact directly
-        # tagged with the label appears in `contacts`, rendered through
-        # the same _widget_contact_list.html partial the Dashboard's own
-        # Contact List widget uses. An untagged contact is excluded.
-        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
-        db.upsert_contact(conn, {"uid": "c1", "full_name": "Jane Doe", "tags": ["CS101"], "created_at": _now()})
-        db.upsert_contact(conn, {"uid": "c2", "full_name": "No Tag", "created_at": _now()})
-        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
-        assert {c["uid"] for c in resp.context["contacts"]} == {"c1"}
-        body = resp.body.decode()
-        assert "Jane Doe" in body
-        assert "No Tag" not in body
-
-    def test_contacts_card_rows_show_avatar_and_open_in_a_modal(self, conn):
-        # 2026-09-16 (direct follow-up request: "the contacts widget
-        # should also contain the contact's photo and on click should
-        # open a modal window, not a page") -- each row now leads with
-        # deps.py's avatar() (initials-on-color fallback here, no photo
-        # set) and the link carries data-modal instead of navigating away.
-        db.upsert_label_config(conn, {"name": "CS101", "created_at": _now()})
-        db.upsert_contact(conn, {"uid": "c1", "full_name": "Jane Doe", "tags": ["CS101"], "created_at": _now()})
-        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
-        body = resp.body.decode()
-        assert 'href="/contacts/c1" data-modal' in body
-        assert 'class="avatar-circle avatar-colored"' in body
-
-    def test_plain_label_grouped_under_a_space_scopes_the_quick_add_link(self, conn):
-        # Direct request: "the label selector should only have labels
-        # from that group." A plain label with a parent Space passes its
-        # own name as page_label_scope (db.label_selector_scope then
-        # resolves that to the Space's other children).
-        db.upsert_label_config(conn, {"name": "University", "generate_space": 1, "created_at": _now()})
-        db.upsert_label_config(conn, {"name": "CS101", "parent_name": "University", "created_at": _now()})
-        resp = label_pages.label_page("CS101", _request("/labels/CS101"), conn=conn)
-        assert resp.context["page_label_scope"] == "CS101"
-        # 2026-09-25 (UI audit L1): a label's page opens the Task tab with
-        # the label prefilled, not New label.
-        assert "/quick/add?default_tab=task&amp;scope=CS101&amp;label=CS101" in resp.body.decode()
-
-    def test_label_with_no_config_row_still_renders(self, conn):
-        db.upsert_task(conn, {"uid": "t1", "title": "X", "description": "", "status": "active",
-                               "tags": ["adhoc"], "created_at": _now()})
-        resp = label_pages.label_page("adhoc", _request("/labels/adhoc"), conn=conn)
-        assert resp.status_code == 200
-        assert resp.context["label"]["color"] == "blue"  # default, sane
 
 
 # --------------------------------------------------------------------- #

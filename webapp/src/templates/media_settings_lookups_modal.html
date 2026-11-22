@@ -1,25 +1,19 @@
 {% extends "base.html" %}
 {% from "_modal.html" import modal %}
-{% from "_inputs.html" import switch_input, text_input %}
-{% block title %}Look up{% endblock %}
+{% from "_inputs.html" import text_input %}
+{% block title %}New source{% endblock %}
 {% block content %}
-{% call modal(kind="form", title="Look up in the reader", size="small", form='lookups-form') %}
+{% call modal(kind="form", title="New source", size="small", form='lookups-form', creating=true) %}
 <form method="post" action="/settings/library/lookups" id="lookups-form">
+    {% for k in on_keys %}<input type="hidden" name="on" value="{{ k }}">{% endfor %}
     <div class="field-grid">
-        {% for l in lookups %}
-        <div class="field field-wide switch-row">
-            <label for="lookup-{{ l.key }}" title="{{ l.url }}">{{ l.name }}</label>
-            {% if l.custom %}<button type="submit" name="remove" value="{{ l.key }}" class="icon-btn" title="Remove {{ l.name }}" aria-label="Remove {{ l.name }}">{{ icon('trash', 'icon-sm') }}</button>{% endif %}
-            {{ switch_input({'name': 'on', 'value': l.key, 'id': 'lookup-' ~ l.key, 'checked': l.on}) }}
+        <div class="field field-wide">
+            <label for="lookup-new-name">Name</label>
+            {{ text_input({'name': 'add_name', 'id': 'lookup-new-name', 'autocomplete': 'off', 'required': true}) }}
         </div>
-        {% endfor %}
-        <div class="field">
-            <label for="lookup-new-name">New source</label>
-            {{ text_input({'name': 'add_name', 'id': 'lookup-new-name', 'autocomplete': 'off'}) }}
-        </div>
-        <div class="field">
-            <label for="lookup-new-url">Address with %s</label>
-            {{ text_input({'name': 'add_url', 'id': 'lookup-new-url', 'autocomplete': 'off'}, 'url') }}
+        <div class="field field-wide">
+            <label for="lookup-new-url">Address</label>
+            {{ text_input({'name': 'add_url', 'id': 'lookup-new-url', 'autocomplete': 'off', 'required': true}, 'url') }}
         </div>
     </div>
 </form>

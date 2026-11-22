@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_modal.html" import modal %}
+{% from "_inputs.html" import password_input, upload_input %}
+{% block title %}Export{% endblock %}
+{% block content %}
+{% set _extra %}<a class="btn ghost" href="/accounts/export/vault" download>{{ icon('lock', 'icon-sm') }} Vault file</a>{% endset %}
+{% call modal(kind="form", title="Export accounts", size="small", form='accounts-export-form', save_label='Export as CSV', save_icon='download', extra_html=_extra) %}
+<div class="modal-sentence">A CSV file is not encrypted, so it asks for the master password again.</div>
+<form method="post" action="/accounts/export/csv" id="accounts-export-form" enctype="multipart/form-data" data-accounts-download>
+    <div class="field-grid">
+        <div class="field field-wide"><label>Master password</label>{{ password_input({'name': 'password', 'autocomplete': 'current-password', 'required': true}) }}</div>
+        <div class="field field-wide"><label>Key file</label>{{ upload_input('key_file', form='accounts-export-form', label='Choose a key file') }}</div>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

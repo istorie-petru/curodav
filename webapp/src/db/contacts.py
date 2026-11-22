@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .core import ENTITY_SYNC_FIELDS, _BIRTHDAY_FULL_RE, _BIRTHDAY_MONTHS, _BIRTHDAY_YEARLESS_RE, _UUID_RE, _row_columns, _row_to_dict, get_app_meta, set_app_meta
+from .. import tags as tag_store
 from .labels import _attach_tags, _attach_tags_bulk, list_object_label_names, set_object_labels
 from .events import _birthday_event_uid, delete_event, get_event, upsert_event
 
@@ -260,6 +261,7 @@ def upsert_contact(
     if record_server_write:
         previous = _row_columns(conn, "contacts", str(data.get("uid")), _CONTACT_SYNC_COLUMNS)
     tags = data.pop("tags", None)
+    space = data.pop("space", None)
     # `phones`/`emails` (the new multi-value lists) are handled separately
     # below, same "pop the non-column keys, write the base row, then attach
     # the related rows" shape `tags` already used -- upsert_contact stays
@@ -289,6 +291,8 @@ def upsert_contact(
     )
     if tags is not None:
         set_object_labels(conn, "contact", data["uid"], tags)
+    if space is not None:
+        tag_store.apply_space(conn, "contact", data["uid"], space)
     if phones is not None:
         set_contact_phones(conn, data["uid"], phones)
     if emails is not None:
